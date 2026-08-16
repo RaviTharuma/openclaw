@@ -124,6 +124,8 @@ type EmbeddedRunAttemptParamsBase = Omit<
   | "pluginHarnessToolPolicySafeDeniedTools"
   | "trajectoryRecorder"
 > & {
+  /** Host-prepared operator cap forwarded to native harness thread config. */
+  authoredContextTokenCap?: number;
   /** Audited exact denies that the plugin harness must enforce against native equivalents. */
   pluginHarnessToolPolicySafeDeniedTools?: readonly string[];
 };
