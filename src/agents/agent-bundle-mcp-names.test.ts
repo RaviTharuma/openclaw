@@ -15,6 +15,23 @@ describe("agent bundle MCP names", () => {
     expect(sanitizeServerName("vigil:harbor", usedNames)).toBe("vigil-harbor-2");
   });
 
+  it.each([
+    ["reserved bare name", "mcp", "mcp-server"],
+    ["reserved namespace prefix", "mcp__reader", "mcp-reader"],
+    ["empty sanitized name", "   ", "mcp-server"],
+  ])("renames %s away from reserved native MCP tool forms", (_label, raw, expected) => {
+    const safeServerName = sanitizeServerName(raw, new Set<string>());
+    const safeToolName = buildSafeToolName({
+      serverName: safeServerName,
+      toolName: "read",
+      reservedNames: new Set(),
+    });
+
+    expect(safeServerName).toBe(expected);
+    expect(safeToolName).toBe(`${expected}${TOOL_NAME_SEPARATOR}read`);
+    expect(safeToolName).not.toMatch(/^mcp__/);
+  });
+
   it("keeps server and tool fragments provider-safe when they start with digits", () => {
     const usedNames = new Set<string>();
     const serverName = sanitizeServerName("12306", usedNames);

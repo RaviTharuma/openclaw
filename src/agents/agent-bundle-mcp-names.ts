@@ -23,7 +23,15 @@ function sanitizeToolFragment(raw: string, fallback: string, maxChars?: number):
 
 /** Sanitize one MCP server name and reserve it in the provided set. */
 export function sanitizeServerName(raw: string, usedNames: Set<string>): string {
-  const base = sanitizeToolFragment(raw, "mcp", TOOL_NAME_MAX_PREFIX);
+  const sanitized = sanitizeToolFragment(raw, "mcp", TOOL_NAME_MAX_PREFIX);
+  // Keep dynamically materialized tools out of the conventional native-MCP
+  // mcp/mcp__* namespace so both surfaces can remain callable together.
+  const base =
+    sanitized === "mcp"
+      ? "mcp-server"
+      : sanitized.startsWith("mcp__")
+        ? `mcp-${sanitized.slice("mcp__".length)}`
+        : sanitized;
   let candidate = base;
   let n = 2;
   while (usedNames.has(normalizeLowercaseStringOrEmpty(candidate))) {
