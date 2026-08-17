@@ -292,16 +292,22 @@ describe("GitHub tool identity", () => {
     });
 
     expect(status.credentialState).toBe(testCase.credentialState);
+    const ghCall = processMocks.runCommandBuffered.mock.calls.find(([argv]) => argv[0] === "gh");
+    expect(ghCall?.[1]?.env).toMatchObject({
+      GH_CONFIG_DIR: profileDir,
+      GH_TOKEN: undefined,
+      GITHUB_TOKEN: undefined,
+    });
     expect(JSON.stringify(status)).not.toContain(testCase.stderr);
   });
 
   it("uses stdin to build a private verified profile and returns only account metadata", async () => {
     const root = tempDirs.make("openclaw-github-profile-");
     const profileDir = path.join(root, "profile");
-    const calls: Array<{ argv: string[]; input?: string }> = [];
+    const calls: Array<{ argv: string[]; env?: NodeJS.ProcessEnv; input?: string }> = [];
     processMocks.runCommandBuffered.mockImplementation(
       async (argv: string[], options: { env?: NodeJS.ProcessEnv; input?: string }) => {
-        calls.push({ argv, input: options.input });
+        calls.push({ argv, env: options.env, input: options.input });
         if (argv[1] === "auth") {
           await fs.writeFile(
             path.join(String(options.env?.GH_CONFIG_DIR), "hosts.yml"),
@@ -327,6 +333,12 @@ describe("GitHub tool identity", () => {
     expect(result).toEqual({ login: "managed-user", avatarUrl: "https://example.test/avatar" });
     expect(calls[0]?.argv).not.toContain("test-managed-token");
     expect(calls[0]?.input).toBe("test-managed-token\n");
+    for (const call of calls) {
+      expect(call.env).toMatchObject({
+        GH_TOKEN: undefined,
+        GITHUB_TOKEN: undefined,
+      });
+    }
     expect((await fs.stat(profileDir)).mode & 0o777).toBe(0o700);
     expect((await fs.stat(path.join(profileDir, "hosts.yml"))).mode & 0o777).toBe(0o600);
   });

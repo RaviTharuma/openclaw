@@ -285,9 +285,11 @@ export async function resolveGitHubToolIdentityStatus(params: {
   const identity = resolveGitHubToolIdentity(params);
   const managed = identity.source !== "system-detected";
   const localIdentityEnv = localIdentityEnvironmentForIdentity(identity);
-  const probeEnv: NodeJS.ProcessEnv = managed
-    ? { GH_TOKEN: "", GITHUB_TOKEN: "", ...localIdentityEnv }
-    : { GH_TOKEN: undefined, GITHUB_TOKEN: undefined };
+  const probeEnv: NodeJS.ProcessEnv = {
+    GH_TOKEN: undefined,
+    GITHUB_TOKEN: undefined,
+    ...localIdentityEnv,
+  };
   const profileAvailable = !managed || (await isPrivateManagedProfile(identity.profileDir));
   const workspaceDir = resolveAgentWorkspaceDir(params.config, params.agentId);
   const [probe, author] = await Promise.all([
@@ -357,10 +359,10 @@ export async function installManagedGitHubProfile(params: {
   let committed = false;
   try {
     await fs.mkdir(stagedProfile, { mode: 0o700 });
-    const stagedEnv = {
+    const stagedEnv: NodeJS.ProcessEnv = {
       GH_CONFIG_DIR: stagedProfile,
-      GH_TOKEN: "",
-      GITHUB_TOKEN: "",
+      GH_TOKEN: undefined,
+      GITHUB_TOKEN: undefined,
     };
     const login = await runIdentityCommand(
       ["gh", "auth", "login", "--hostname", GITHUB_HOST, "--with-token", "--insecure-storage"],
