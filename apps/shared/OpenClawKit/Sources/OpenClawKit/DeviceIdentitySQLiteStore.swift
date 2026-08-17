@@ -252,10 +252,22 @@ enum DeviceIdentitySQLiteStore {
         return authoritative.identity
     }
 
+    static func resolveStateDatabaseCoordinatorURL(
+        databaseURL: URL,
+        runtimeDirectory: URL,
+        uid: uid_t) -> URL
+    {
+        let canonicalDatabasePath = self.canonicalExistingAncestorPath(databaseURL)
+        let digest = SHA256.hash(data: Data(canonicalDatabasePath.utf8))
+        let pathHash = digest.prefix(4).map { String(format: "%02x", $0) }.joined()
+        return runtimeDirectory.standardizedFileURL
+            .appendingPathComponent("openclaw-state-locks-\(uid)", isDirectory: true)
+            .appendingPathComponent("state-lifecycle.\(pathHash).lock.sqlite", isDirectory: false)
+    }
+
     static func resolveDeviceIdentityCoordinatorURLs(
         databaseURL: URL,
         destinationStateDirURL: URL,
-        temporaryDirectory: URL,
         uid: uid_t) -> [URL]
     {
         let canonicalDatabasePath = self.canonicalExistingAncestorPath(databaseURL)
@@ -266,35 +278,32 @@ enum DeviceIdentitySQLiteStore {
         let canonicalStateDirURL = URL(
             fileURLWithPath: self.canonicalExistingAncestorPath(destinationStateDirURL),
             isDirectory: true)
-        let orderedURLs = [
-            temporaryDirectory.standardizedFileURL
-                .appendingPathComponent(suffix, isDirectory: true)
-                .appendingPathComponent(filename, isDirectory: false),
+        return [
             canonicalStateDirURL
                 .appendingPathComponent("tmp", isDirectory: true)
                 .appendingPathComponent(suffix, isDirectory: true)
                 .appendingPathComponent(filename, isDirectory: false),
         ]
-        var seen: Set<String> = []
-        return orderedURLs.filter { seen.insert(self.canonicalExistingAncestorPath($0)).inserted }
     }
 
     private static func acquireIdentityCoordinator(
         databaseURL: URL,
         destinationStateDirURL: URL) throws -> IdentityCoordinator
     {
-        let coordinatorURLs = self.resolveDeviceIdentityCoordinatorURLs(
+        let coordinatorURLs = [
+            self.resolveStateDatabaseCoordinatorURL(
+                databaseURL: databaseURL,
+                runtimeDirectory: URL(fileURLWithPath: "/tmp", isDirectory: true),
+                uid: getuid()),
+        ] + self.resolveDeviceIdentityCoordinatorURLs(
             databaseURL: databaseURL,
             destinationStateDirURL: destinationStateDirURL,
-            temporaryDirectory: FileManager.default.temporaryDirectory,
             uid: getuid())
         for coordinatorURL in coordinatorURLs {
             try self.secureCoordinatorDirectory(coordinatorURL.deletingLastPathComponent())
         }
         var databases: [OpaquePointer] = []
         do {
-            // v2026.7.2-beta.4 through beta.7 use process temp. Keep it first until
-            // those builds are no longer rolling-upgrade peers.
             for coordinatorURL in coordinatorURLs {
                 try databases.append(self.acquireIdentityCoordinator(at: coordinatorURL))
             }
