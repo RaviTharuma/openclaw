@@ -64,7 +64,6 @@
   "approvalPolicy": "never",
   "approvalsReviewer": "user",
   "config": {
-    "allow_login_shell": false,
     "code_mode.direct_only_tool_namespaces": ["openclaw_direct"],
     "features.apply_patch_streaming_events": true,
     "features.code_mode": true,
@@ -109,7 +108,6 @@
   "approvalPolicy": "never",
   "approvalsReviewer": "user",
   "config": {
-    "allow_login_shell": false,
     "features.apply_patch_streaming_events": true,
     "features.code_mode": true,
     "features.code_mode_only": false,

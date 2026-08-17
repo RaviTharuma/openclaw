@@ -94,6 +94,7 @@ export async function startCodexAttemptRuntime(resources: CodexAttemptResources)
       agentDir,
       config: params.config,
       shellEnvironment: connection.shellEnvironment,
+      disableLoginShell: connection.disableLoginShell,
       buildAttemptParams: buildActiveRunAttemptParams,
       sessionAgentId,
       effectiveWorkspace,

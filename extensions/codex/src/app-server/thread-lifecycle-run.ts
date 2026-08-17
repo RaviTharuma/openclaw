@@ -188,6 +188,7 @@ export async function startOrResumeThread(
         restrictedToolSurface,
         restrictedToolSurfaceInheritedMcpServerNames,
         shellEnvironment: params.shellEnvironment,
+        disableLoginShell: params.disableLoginShell,
         environmentSelection: params.environmentSelection,
         provisionalAppIds: pluginThreadConfig?.provisionalAppIds,
         signal: params.signal,

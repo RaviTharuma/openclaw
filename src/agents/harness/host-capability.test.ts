@@ -242,8 +242,8 @@ describe("agent harness host capability", () => {
   });
 
   it("clears ambient GitHub service tokens for a native local identity", async () => {
-    vi.stubEnv("GH_TOKEN", "");
-    vi.stubEnv("GITHUB_TOKEN", "");
+    vi.stubEnv("GH_TOKEN", "ambient-service-token");
+    vi.stubEnv("GITHUB_TOKEN", "ambient-fallback-token");
     const { attempt } = await admittedAttempt("run-native-local-env", { config: {} });
     const host = createAgentHarnessHostCapabilities({ attempt, pluginId: "codex" });
 
@@ -279,15 +279,16 @@ describe("agent harness host capability", () => {
       const host = createAgentHarnessHostCapabilities({ attempt, pluginId: "codex" });
       const environment = host.capabilities.preparedEnvironment?.();
 
-      expect(environment?.credentialScrubEnv).toMatchObject({
-        GH_TOKEN: "",
-        GITHUB_TOKEN: "",
-      });
-      if (source === "env") {
-        expect(environment?.credentialScrubEnv).toHaveProperty("PREVIEW_SERVICE_TOKEN", "");
+      if (managed || source === "env") {
+        expect(environment?.credentialScrubEnv).toMatchObject({
+          GH_TOKEN: "",
+          GITHUB_TOKEN: "",
+        });
       } else {
-        expect(environment?.credentialScrubEnv).toHaveProperty("PREVIEW_SERVICE_TOKEN", "");
+        expect(environment?.credentialScrubEnv).not.toHaveProperty("GH_TOKEN");
+        expect(environment?.credentialScrubEnv).not.toHaveProperty("GITHUB_TOKEN");
       }
+      expect(environment?.credentialScrubEnv).toHaveProperty("PREVIEW_SERVICE_TOKEN", "");
       expect(environment?.managedLocalIdentity).toBe(managed);
       expect(environment?.localIdentityEnv).not.toHaveProperty("PREVIEW_SERVICE_TOKEN");
     },

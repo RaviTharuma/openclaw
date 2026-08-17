@@ -132,13 +132,19 @@ export function prepareGitHubToolEnvironment(params: {
   env?: NodeJS.ProcessEnv;
 }): PreparedGitHubToolEnvironment {
   const identity = resolveGitHubToolIdentity(params);
-  const credentialScrubEnv: Record<string, string> = {
-    GH_TOKEN: "",
-    GITHUB_TOKEN: "",
-  };
+  const managedLocalIdentity = identity.source !== "system-detected";
   const previewToken =
     params.sourceConfig?.gateway?.controlUi?.github?.token ??
     params.config.gateway?.controlUi?.github?.token;
+  const environment = params.env ?? process.env;
+  const previewUsesEnvironment = isSecretRef(previewToken) && previewToken.source === "env";
+  const credentialScrubEnv: Record<string, string> =
+    managedLocalIdentity ||
+    previewUsesEnvironment ||
+    readNonBlankString(environment.GH_TOKEN) ||
+    readNonBlankString(environment.GITHUB_TOKEN)
+      ? { GH_TOKEN: "", GITHUB_TOKEN: "" }
+      : {};
   const excludedStoreNames: string[] = [];
   if (isSecretRef(previewToken)) {
     if (previewToken.source === "env" && isValidEnvSecretRefId(previewToken.id)) {
@@ -152,7 +158,7 @@ export function prepareGitHubToolEnvironment(params: {
     credentialScrubEnv: Object.freeze(credentialScrubEnv),
     localIdentityEnv: Object.freeze({ ...localIdentityEnvironmentForIdentity(identity) }),
     excludedStoreNames: Object.freeze(excludedStoreNames),
-    managedLocalIdentity: identity.source !== "system-detected",
+    managedLocalIdentity,
   });
 }
 

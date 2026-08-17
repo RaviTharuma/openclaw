@@ -17,10 +17,6 @@ declare module "../plugins/hook-types.js" {
 
 const CHANNEL_CONTEXT_ENV_KEY = "OPENCLAW_CHANNEL_CONTEXT";
 const OPENCLAW_CLI_ENV_VALUE = "1";
-const GITHUB_CREDENTIAL_SCRUB_ENV = {
-  GH_TOKEN: "",
-  GITHUB_TOKEN: "",
-} as const;
 type CapturedNodeHostParams = Pick<
   ExecuteNodeHostCommandParams,
   "env" | "requestedEnv" | "workdir"
@@ -690,7 +686,6 @@ describe("exec resolve_exec_env hook wiring", () => {
     expect(mocks.hookRunner.runResolveExecEnv!).toHaveBeenCalledTimes(1);
     expect(mocks.gatewayParams[0]?.requestedEnv).toEqual({
       EXISTING: "request",
-      ...GITHUB_CREDENTIAL_SCRUB_ENV,
       PLUGIN_SAFE: "yes",
     });
   });
@@ -738,7 +733,6 @@ describe("exec resolve_exec_env hook wiring", () => {
     });
     expect(mocks.hookRunner.runResolveExecEnv!).toHaveBeenCalledTimes(1);
     expect(mocks.gatewayParams[0]?.requestedEnv).toEqual({
-      ...GITHUB_CREDENTIAL_SCRUB_ENV,
       LAZY_PLUGIN_SAFE: "yes",
       REQUEST_SAFE: "request",
     });
@@ -791,7 +785,6 @@ describe("exec resolve_exec_env hook wiring", () => {
       expect.anything(),
     );
     expect(mocks.nodeHostParams[0]?.requestedEnv).toEqual({
-      ...GITHUB_CREDENTIAL_SCRUB_ENV,
       NODE_PLUGIN_SAFE: "node",
       REQUEST_SAFE: "request",
     });
@@ -841,7 +834,6 @@ describe("exec resolve_exec_env hook wiring", () => {
       expect.anything(),
     );
     expect(mocks.nodeHostParams[0]?.requestedEnv).toEqual({
-      ...GITHUB_CREDENTIAL_SCRUB_ENV,
       NODE_PLUGIN_SAFE: "node",
       REQUEST_SAFE: "request",
     });
@@ -885,7 +877,6 @@ describe("exec resolve_exec_env hook wiring", () => {
 
     expect(mocks.hookRunner.runResolveExecEnv!).not.toHaveBeenCalled();
     expect(mocks.gatewayParams[0]?.requestedEnv).toEqual({
-      ...GITHUB_CREDENTIAL_SCRUB_ENV,
       REQUEST_SAFE: "request",
     });
   });
@@ -908,7 +899,6 @@ describe("exec resolve_exec_env hook wiring", () => {
     });
 
     expect(mocks.gatewayParams[0]?.requestedEnv).toEqual({
-      ...GITHUB_CREDENTIAL_SCRUB_ENV,
       REQUEST_SAFE: "request",
     });
   });
@@ -954,7 +944,6 @@ describe("exec resolve_exec_env hook wiring", () => {
     });
     expect(mocks.hookRunner.runResolveExecEnv!).toHaveBeenCalledTimes(1);
     expect(mocks.gatewayParams[0]?.requestedEnv).toEqual({
-      ...GITHUB_CREDENTIAL_SCRUB_ENV,
       PLUGIN_SAFE: "yes",
       REQUEST_SAFE: "request",
     });

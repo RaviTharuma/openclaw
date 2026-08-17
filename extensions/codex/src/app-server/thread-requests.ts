@@ -162,6 +162,7 @@ export function buildThreadStartParams(
     hostSystemAgentActive?: boolean;
     restrictedToolSurfaceInheritedMcpServerNames?: readonly string[];
     shellEnvironment?: Readonly<Record<string, string>>;
+    disableLoginShell?: boolean;
   },
 ): CodexThreadStartParams {
   const ringZeroActive =
@@ -209,6 +210,7 @@ export function buildThreadStartParams(
       restrictedToolSurfaceInheritedMcpServerNames:
         options.restrictedToolSurfaceInheritedMcpServerNames,
       shellEnvironment: options.shellEnvironment,
+      disableLoginShell: options.disableLoginShell,
     }),
     ...resolveCodexThreadEnvironmentSelection(options),
     developerInstructions:
@@ -243,6 +245,7 @@ export function buildThreadResumeParams(
     hostSystemAgentActive?: boolean;
     restrictedToolSurfaceInheritedMcpServerNames?: readonly string[];
     shellEnvironment?: Readonly<Record<string, string>>;
+    disableLoginShell?: boolean;
     preserveNativeModel?: boolean;
   },
 ): CodexThreadResumeParams {
@@ -302,6 +305,7 @@ export function buildThreadResumeParams(
       restrictedToolSurfaceInheritedMcpServerNames:
         options.restrictedToolSurfaceInheritedMcpServerNames,
       shellEnvironment: options.shellEnvironment,
+      disableLoginShell: options.disableLoginShell,
     }),
     developerInstructions:
       options.developerInstructions ??
@@ -403,6 +407,7 @@ export function buildCodexRuntimeThreadConfigForRun(
     hostSystemAgentActive?: boolean;
     restrictedToolSurfaceInheritedMcpServerNames?: readonly string[];
     shellEnvironment?: Readonly<Record<string, string>>;
+    disableLoginShell?: boolean;
   } = {},
 ): JsonObject {
   const ringZeroActive =
@@ -467,7 +472,11 @@ export function buildCodexRuntimeThreadConfigForRun(
           ...runtimeConfig,
           ...CODEX_LIGHTWEIGHT_CONTEXT_THREAD_CONFIG,
         });
-  return applyCodexManagedShellEnvironment(contextConfig, options.shellEnvironment);
+  return applyCodexManagedShellEnvironment(
+    contextConfig,
+    options.shellEnvironment,
+    options.disableLoginShell,
+  );
 }
 
 export function buildCodexRingZeroThreadConfigPatch(

@@ -142,27 +142,32 @@ describe("GitHub tool identity", () => {
       agentId: "main",
     });
     expect(storeScrub.credentialScrubEnv).toEqual({
-      GH_TOKEN: "",
-      GITHUB_TOKEN: "",
+      ...(managed ? { GH_TOKEN: "", GITHUB_TOKEN: "" } : {}),
       PREVIEW_STORE_TOKEN: "",
     });
     expect(storeScrub.excludedStoreNames).toEqual(["PREVIEW_STORE_TOKEN"]);
   });
 
-  it("does not derive isolation policy from ambient credential presence", () => {
+  it("scrubs ambient credentials without treating native identity as managed", () => {
     const native = prepareGitHubToolEnvironment({
       config: {},
       agentId: "main",
       env: {},
     });
-    expect(native.managedLocalIdentity).toBe(false);
+    expect(native).toMatchObject({
+      credentialScrubEnv: {},
+      managedLocalIdentity: false,
+    });
 
     const ambient = prepareGitHubToolEnvironment({
       config: {},
       agentId: "main",
       env: { GH_TOKEN: "test-token" },
     });
-    expect(ambient).toEqual(native);
+    expect(ambient).toMatchObject({
+      credentialScrubEnv: { GH_TOKEN: "", GITHUB_TOKEN: "" },
+      managedLocalIdentity: false,
+    });
 
     const previewEnvRef = prepareGitHubToolEnvironment({
       config: {

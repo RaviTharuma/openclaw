@@ -44,6 +44,55 @@ describe("prepareCodexAttemptConnection", () => {
 
     expect(connection.appServer.start.env).toMatchObject({ GH_TOKEN: "", GITHUB_TOKEN: "" });
     expect(connection.shellEnvironment).toEqual({ GH_TOKEN: "", GITHUB_TOKEN: "" });
+    expect(connection.disableLoginShell).toBe(true);
+  });
+
+  it("preserves native login-shell behavior when no credential overlay exists", async () => {
+    const sessionFile = path.join(tempDir, "native-local-no-overlay.jsonl");
+    const workspaceDir = path.join(tempDir, "workspace-native-local-no-overlay");
+    const params = createParams(sessionFile, workspaceDir);
+    params.hostCapabilities = Object.freeze({
+      ...params.hostCapabilities,
+      preparedEnvironment: () =>
+        Object.freeze({
+          credentialScrubEnv: Object.freeze({}),
+          localIdentityEnv: Object.freeze({}),
+          managedLocalIdentity: false,
+        }),
+    });
+    registerCodexTestSessionIdentity(sessionFile, params.sessionId, params.sessionKey);
+
+    const connection = await prepareCodexAttemptConnection({
+      params,
+      options: { bindingStore: testCodexAppServerBindingStore },
+    });
+
+    expect(connection.shellEnvironment).toBeUndefined();
+    expect(connection.disableLoginShell).toBe(false);
+  });
+
+  it("disables login shells for custom credential scrub overlays", async () => {
+    const sessionFile = path.join(tempDir, "native-local-custom-scrub.jsonl");
+    const workspaceDir = path.join(tempDir, "workspace-native-local-custom-scrub");
+    const params = createParams(sessionFile, workspaceDir);
+    params.hostCapabilities = Object.freeze({
+      ...params.hostCapabilities,
+      preparedEnvironment: () =>
+        Object.freeze({
+          credentialScrubEnv: Object.freeze({ PREVIEW_STORE_TOKEN: "" }),
+          localIdentityEnv: Object.freeze({}),
+          managedLocalIdentity: false,
+        }),
+    });
+    registerCodexTestSessionIdentity(sessionFile, params.sessionId, params.sessionKey);
+
+    const connection = await prepareCodexAttemptConnection({
+      params,
+      options: { bindingStore: testCodexAppServerBindingStore },
+    });
+
+    expect(connection.shellEnvironment).toEqual({ PREVIEW_STORE_TOKEN: "" });
+    expect(connection.disableLoginShell).toBe(true);
   });
 
   it("adds the host-prepared environment to a local app-server process", async () => {
@@ -73,6 +122,7 @@ describe("prepareCodexAttemptConnection", () => {
       GH_CONFIG_DIR: "/private/managed-gh",
       GIT_AUTHOR_NAME: "Managed Author",
     });
+    expect(connection.disableLoginShell).toBe(true);
   });
 
   it("adds only credential scrubbing to remote execution", async () => {
@@ -125,6 +175,7 @@ describe("prepareCodexAttemptConnection", () => {
     expect(connection.appServer.start.env ?? {}).not.toHaveProperty("GH_CONFIG_DIR");
     expect(connection.appServer.start.env ?? {}).not.toHaveProperty("GIT_AUTHOR_NAME");
     expect(connection.shellEnvironment).toEqual({ GH_TOKEN: "", GITHUB_TOKEN: "" });
+    expect(connection.disableLoginShell).toBe(true);
   });
 
   it.each([

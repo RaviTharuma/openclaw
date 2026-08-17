@@ -114,7 +114,6 @@ function createParams(sessionFile: string, workspaceDir: string) {
 }
 
 const DEFAULT_CODEX_RUNTIME_THREAD_CONFIG = {
-  allow_login_shell: false,
   "features.goals": false,
   "features.code_mode": true,
   "features.code_mode_only": false,

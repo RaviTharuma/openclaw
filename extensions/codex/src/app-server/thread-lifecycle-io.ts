@@ -198,6 +198,7 @@ export async function resumeExistingCodexThread(
         hostSystemAgentActive,
         restrictedToolSurfaceInheritedMcpServerNames,
         shellEnvironment: params.shellEnvironment,
+        disableLoginShell: params.disableLoginShell,
       }),
     );
     const requestModelProvider =
@@ -480,6 +481,7 @@ export async function startFreshCodexThread(
       hostSystemAgentActive,
       restrictedToolSurfaceInheritedMcpServerNames,
       shellEnvironment: params.shellEnvironment,
+      disableLoginShell: params.disableLoginShell,
     }),
   );
   const requestModelProvider =

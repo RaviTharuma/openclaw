@@ -145,6 +145,7 @@ export async function startCodexAttemptThread(params: {
   agentDir: string;
   config: EmbeddedRunAttemptParams["config"] | undefined;
   shellEnvironment?: Readonly<Record<string, string>>;
+  disableLoginShell?: boolean;
   buildAttemptParams: () => EmbeddedRunAttemptParams;
   sessionAgentId: string;
   effectiveWorkspace: string;
@@ -475,6 +476,7 @@ export async function startCodexAttemptThread(params: {
                 developerInstructions: params.developerInstructions,
                 config: threadConfig,
                 shellEnvironment: params.shellEnvironment,
+                disableLoginShell: params.disableLoginShell,
                 finalConfigPatch: params.finalConfigPatch,
                 buildFinalConfigPatch: params.buildFinalConfigPatch,
                 nativeHookRelayGeneration: params.nativeHookRelayGeneration,

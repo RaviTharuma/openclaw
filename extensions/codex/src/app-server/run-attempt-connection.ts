@@ -111,12 +111,23 @@ export async function prepareCodexAttemptConnection({ params, options }: CodexRu
   const agentDir = params.agentDir ?? resolveAgentDir(params.config ?? {}, sessionAgentId);
   const preparedEnvironment = params.hostCapabilities.preparedEnvironment?.();
   const remoteExec = isCodexRemoteExecPlacementSandbox(sandbox);
-  const shellEnvironment = preparedEnvironment
+  const preparedShellEnvironment = preparedEnvironment
     ? {
         ...preparedEnvironment.credentialScrubEnv,
         ...(!remoteExec ? preparedEnvironment.localIdentityEnv : undefined),
       }
     : undefined;
+  const shellEnvironment =
+    preparedShellEnvironment && Object.keys(preparedShellEnvironment).length > 0
+      ? preparedShellEnvironment
+      : undefined;
+  // An empty system-detected overlay intentionally keeps the runtime user's native shell identity.
+  // Selected, scrubbed, or remote identities must not let a later profile replace that decision.
+  const disableLoginShell =
+    remoteExec ||
+    preparedEnvironment?.managedLocalIdentity === true ||
+    (preparedEnvironment !== undefined &&
+      Object.keys(preparedEnvironment.credentialScrubEnv).length > 0);
   const withPreparedProcessEnv = <T extends { start: { env?: Record<string, string> } }>(
     appServer: T,
   ) => {
@@ -441,6 +452,7 @@ export async function prepareCodexAttemptConnection({ params, options }: CodexRu
     sandbox,
     agentDir,
     shellEnvironment,
+    disableLoginShell,
     bindingIdentity,
     bindingStore,
     activeContextEngine,

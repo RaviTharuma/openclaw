@@ -1,12 +1,13 @@
 import { isJsonObject, type JsonObject } from "./protocol.js";
 
-/** Applies host-selected values and login-shell policy after every thread-config layer. */
+/** Applies host-selected values and any required login-shell restriction last. */
 export function applyCodexManagedShellEnvironment(
   config: JsonObject,
   environment: Readonly<Record<string, string>> | undefined,
+  disableLoginShell = false,
 ): JsonObject {
   if (!environment || Object.keys(environment).length === 0) {
-    return { ...config, allow_login_shell: false };
+    return disableLoginShell ? { ...config, allow_login_shell: false } : config;
   }
   const current = isJsonObject(config.shell_environment_policy)
     ? config.shell_environment_policy
@@ -38,5 +39,5 @@ export function applyCodexManagedShellEnvironment(
           : {}),
     },
   };
-  return { ...managedConfig, allow_login_shell: false };
+  return disableLoginShell ? { ...managedConfig, allow_login_shell: false } : managedConfig;
 }
