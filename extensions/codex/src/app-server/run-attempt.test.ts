@@ -65,9 +65,11 @@ import {
 import { buildCodexPluginThreadConfig } from "./plugin-thread-config.js";
 import {
   flattenCodexDynamicToolFunctions,
+  isJsonObject,
   type CodexDynamicToolFunctionSpec,
   type CodexDynamicToolSpec,
   type CodexServerNotification,
+  type JsonObject,
   type v2,
 } from "./protocol.js";
 import { itemNotification, rawItemCompleted, turnCompleted } from "./protocol.test-helpers.js";
@@ -2314,11 +2316,33 @@ describe("runCodexAppServerAttempt", () => {
     expect(request.mock.calls.map(([method]) => method)).not.toContain("app/read");
   });
 
-  it("replaces the native surface with an exact conversation-policy-filtered catalog", async () => {
-    const executeProgressCard = vi.fn(async (_toolCallId: string, _params: unknown) => ({
-      content: [{ type: "text" as const, text: "Progress card updated" }],
-      details: {},
-    }));
+  it("replaces the native surface with a filtered catalog and canonical plan persistence", async () => {
+    const persistedProgressCardInputs: JsonObject[] = [];
+    const executeProgressCard = vi.fn(async (_toolCallId: string, input: unknown) => {
+      if (!isJsonObject(input)) {
+        throw new Error("progress card input must be an object");
+      }
+      const { markdown, plan } = input;
+      const planSteps = Array.isArray(plan) ? plan.filter(isJsonObject) : [];
+      const activeSteps = planSteps.filter((entry) => entry.status === "in_progress");
+      const hasOversizedStep = planSteps.some((entry) => {
+        const { step } = entry;
+        return typeof step === "string" && Buffer.byteLength(step, "utf8") > 512;
+      });
+      if (
+        planSteps.length > 50 ||
+        activeSteps.length > 1 ||
+        hasOversizedStep ||
+        (typeof markdown === "string" && Buffer.byteLength(markdown, "utf8") > 8 * 1024)
+      ) {
+        throw new Error("progress card input exceeded its persistence contract");
+      }
+      persistedProgressCardInputs.push(input);
+      return {
+        content: [{ type: "text" as const, text: "Progress card updated" }],
+        details: {},
+      };
+    });
     testing.setOpenClawCodingToolsFactoryForTests((options) => {
       const tools = createOpenClawCodingTools(options).filter((tool) =>
         ["read", "write", "edit", "apply_patch", "exec", "process", "progress_card"].includes(
@@ -2439,21 +2463,40 @@ describe("runCodexAppServerAttempt", () => {
     });
     expect(JSON.stringify(planRestoreRequests[0]?.params)).toContain("progress_card");
 
-    const nativePlan = [{ step: "Finish native projection", status: "in_progress" }];
+    const nativePlan = Array.from({ length: 51 }, (_, index) => ({
+      step: index === 0 ? `Ship ${"🚀".repeat(200)}` : `Native step ${index}`,
+      status: index < 2 ? "inProgress" : "pending",
+    }));
     await harness.notify({
       method: "turn/plan/updated",
       params: {
         threadId: "thread-1",
         turnId: "turn-1",
-        explanation: "Native plan note",
-        plan: [{ step: "Finish native projection", status: "inProgress" }],
+        explanation: "m".repeat(9_000),
+        plan: nativePlan,
       },
     });
     expect(executeProgressCard).toHaveBeenCalledTimes(2);
-    expect(executeProgressCard.mock.calls[1]?.[1]).toEqual({
-      markdown: "Native plan note",
-      plan: nativePlan,
-    });
+    const persistedNativeInput = persistedProgressCardInputs[1];
+    expect(persistedNativeInput).toBeDefined();
+    if (!persistedNativeInput) {
+      throw new Error("native progress card input was not persisted");
+    }
+    const canonicalPlan = Array.isArray(persistedNativeInput.plan)
+      ? persistedNativeInput.plan.filter(isJsonObject)
+      : [];
+    expect(canonicalPlan).toHaveLength(50);
+    expect(canonicalPlan.at(-1)?.step).toBe("Native step 49");
+    expect(canonicalPlan[0]?.status).toBe("in_progress");
+    expect(canonicalPlan[1]?.status).toBe("pending");
+    const firstStep = canonicalPlan[0]?.step;
+    expect(
+      Buffer.byteLength(typeof firstStep === "string" ? firstStep : "", "utf8"),
+    ).toBeLessThanOrEqual(512);
+    const canonicalMarkdown = persistedNativeInput.markdown;
+    expect(
+      Buffer.byteLength(typeof canonicalMarkdown === "string" ? canonicalMarkdown : "", "utf8"),
+    ).toBeLessThanOrEqual(8 * 1024);
     await harness.notify(
       itemNotification("item/started", { type: "contextCompaction", id: "compact-2" }),
     );
@@ -2469,7 +2512,7 @@ describe("runCodexAppServerAttempt", () => {
         {
           content: [
             {
-              text: expect.stringContaining('"markdown":"Native plan note"'),
+              text: expect.stringContaining('"markdown":"mmm'),
             },
           ],
         },

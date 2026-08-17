@@ -320,7 +320,7 @@ describe("runCodexAppServerAttempt native hook relay", () => {
       },
     });
     expect(approvalSpy).toHaveBeenCalledWith(expect.objectContaining({ autoApprove: true }));
-    expect(commandResponse).toEqual({ decision: "acceptForSession" });
+    expect(commandResponse).toEqual({ decision: "accept" });
     await expect(
       harness.handleServerRequest({
         id: "request-file-policy-allow",

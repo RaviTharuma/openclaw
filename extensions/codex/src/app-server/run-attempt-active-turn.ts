@@ -14,6 +14,7 @@ import {
 } from "./attempt-steering.js";
 import { CodexAppServerEventProjector } from "./event-projector.js";
 import { createCodexNativeMcpAppResultDetailsPreparer } from "./native-mcp-app.js";
+import { canonicalizeNativeProgressCardInput } from "./plan-compaction-state.js";
 import { isJsonObject, type CodexTurnStartResponse } from "./protocol.js";
 import { readRecentCodexRateLimits } from "./rate-limit-cache.js";
 import { readBoundedCodexRemoteWorkspaceFile } from "./remote-workspace-media.js";
@@ -127,12 +128,10 @@ export async function activateCodexAttemptTurn(
             }) => {
               nativePlanUpdateOrdinal += 1;
               try {
+                const input = canonicalizeNativeProgressCardInput(update);
                 await progressCardTool.execute(
                   `codex-native-plan:${activeTurnId}:${nativePlanUpdateOrdinal}`,
-                  {
-                    ...(update.markdown !== undefined ? { markdown: update.markdown } : {}),
-                    plan: update.steps,
-                  },
+                  input,
                   runAbortController.signal,
                 );
               } catch (error) {
