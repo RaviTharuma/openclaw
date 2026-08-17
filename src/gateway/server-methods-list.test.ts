@@ -337,7 +337,8 @@ describe("listGatewayMethods", () => {
     expect(methods.indexOf("portal.open")).toBe(methods.indexOf("portal.list") + 1);
     expect(methods.indexOf("portal.close")).toBe(methods.indexOf("portal.open") + 1);
     expect(methods.indexOf("sessions.move")).toBe(methods.indexOf("portal.close") + 1);
-    expect(methods.indexOf("progressCard.get")).toBe(methods.indexOf("sessions.move") + 1);
+    expect(methods.indexOf("sessions.assignOwner")).toBe(methods.indexOf("sessions.move") + 1);
+    expect(methods.indexOf("progressCard.get")).toBe(methods.indexOf("sessions.assignOwner") + 1);
     expect(methods.indexOf("progressCard.put")).toBe(methods.indexOf("progressCard.get") + 1);
   });
 
