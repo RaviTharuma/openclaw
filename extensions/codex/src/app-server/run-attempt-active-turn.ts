@@ -62,6 +62,8 @@ export async function activateCodexAttemptTurn(
   const { emitExecutionPhaseOnce, emitLifecycleStart, maybeAnnounceFastModeAutoOff } = lifecycle;
   const { enqueueNotification } = notifications;
   const activeTurnId = turn.turn.id;
+  const progressCardTool = toolBridge.availableTools.find((tool) => tool.name === "progress_card");
+  let nativePlanUpdateOrdinal = 0;
   const prepareNativeMcpAppResultDetails = createCodexNativeMcpAppResultDetailsPreparer({
     client: resourceState.client,
     threadId: resourceState.thread.threadId,
@@ -114,6 +116,35 @@ export async function activateCodexAttemptTurn(
       trajectoryRecorder,
       resolveDynamicToolResultContentSource: toolBridge.resultContentSourceForTool,
       onNativeToolResultRecorded: maybeAnnounceFastModeAutoOff,
+      ...(progressCardTool
+        ? {
+            onNativePlanUpdate: async (update: {
+              markdown?: string;
+              steps: Array<{
+                step: string;
+                status: "pending" | "in_progress" | "completed";
+              }>;
+            }) => {
+              nativePlanUpdateOrdinal += 1;
+              try {
+                await progressCardTool.execute(
+                  `codex-native-plan:${activeTurnId}:${nativePlanUpdateOrdinal}`,
+                  {
+                    ...(update.markdown !== undefined ? { markdown: update.markdown } : {}),
+                    plan: update.steps,
+                  },
+                  runAbortController.signal,
+                );
+              } catch (error) {
+                embeddedAgentLog.warn("failed to persist native Codex plan to progress card", {
+                  runId: params.runId,
+                  threadId: resourceState.thread.threadId,
+                  error: formatErrorMessage(error),
+                });
+              }
+            },
+          }
+        : {}),
       ...(prepareNativeMcpAppResultDetails ? { prepareNativeMcpAppResultDetails } : {}),
       upstreamUserText: turnState.codexTurnPromptText,
       onContextCompacted: async () => {

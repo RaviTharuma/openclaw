@@ -166,7 +166,7 @@ const testing = {
       names.push("message");
     }
     if (params.pluginHarnessToolPolicyRestricted === true) {
-      names.push("update_plan");
+      names.push("progress_card");
     }
     return names;
   },
@@ -1475,6 +1475,7 @@ describe("runCodexAppServerAttempt", () => {
         "exec",
         "process",
         "update_plan",
+        "progress_card",
         "tool_call",
         "tool_describe",
         "tool_search",
@@ -1497,6 +1498,7 @@ describe("runCodexAppServerAttempt", () => {
         [],
     );
     expect(dynamicToolNames).toContain("message");
+    expect(dynamicToolNames).toContain("progress_card");
     expect(dynamicToolNames).toContain("web_search");
     for (const toolName of [
       "read",
@@ -2313,12 +2315,20 @@ describe("runCodexAppServerAttempt", () => {
   });
 
   it("replaces the native surface with an exact conversation-policy-filtered catalog", async () => {
+    const executeProgressCard = vi.fn(async (_toolCallId: string, _params: unknown) => ({
+      content: [{ type: "text" as const, text: "Progress card updated" }],
+      details: {},
+    }));
     testing.setOpenClawCodingToolsFactoryForTests((options) =>
-      createOpenClawCodingTools(options).filter((tool) =>
-        ["read", "write", "edit", "apply_patch", "exec", "process", "update_plan"].includes(
-          tool.name,
+      createOpenClawCodingTools(options)
+        .filter((tool) =>
+          ["read", "write", "edit", "apply_patch", "exec", "process", "progress_card"].includes(
+            tool.name,
+          ),
+        )
+        .map((tool) =>
+          tool.name === "progress_card" ? { ...tool, execute: executeProgressCard } : tool,
         ),
-      ),
     );
     const params = createRunParams();
     params.disableTools = false;
@@ -2358,12 +2368,13 @@ describe("runCodexAppServerAttempt", () => {
     );
 
     expect(startParams?.environments).toEqual([]);
-    expect(dynamicToolNames.toSorted()).toEqual(["apply_patch", "read", "update_plan"]);
-    const updatePlanSpec = flattenSpecsWithNamespace(startParams?.dynamicTools ?? []).find(
-      (tool) => tool.name === "update_plan",
+    expect(startParams?.config?.["tools.update_plan.enabled"]).toBe(false);
+    expect(dynamicToolNames.toSorted()).toEqual(["apply_patch", "progress_card", "read"]);
+    const progressCardSpec = flattenSpecsWithNamespace(startParams?.dynamicTools ?? []).find(
+      (tool) => tool.name === "progress_card",
     );
-    expect(updatePlanSpec).not.toHaveProperty("namespace");
-    expect(updatePlanSpec).not.toHaveProperty("deferLoading");
+    expect(progressCardSpec).not.toHaveProperty("namespace");
+    expect(progressCardSpec).not.toHaveProperty("deferLoading");
     expect(startParams?.config).toMatchObject({
       "features.hooks": false,
       "hooks.PreToolUse": [],
@@ -2385,8 +2396,8 @@ describe("runCodexAppServerAttempt", () => {
         turnId: "turn-1",
         callId: "call-plan-1",
         namespace: null,
-        tool: "update_plan",
-        arguments: { explanation: "Plan restored", plan },
+        tool: "progress_card",
+        arguments: { markdown: "Plan restored", plan },
       },
     });
     expect(response).toMatchObject({ success: true });
@@ -2396,10 +2407,10 @@ describe("runCodexAppServerAttempt", () => {
         phase: "update",
         title: "Plan updated",
         source: "openclaw",
-        explanation: "Plan restored",
         steps: plan,
       },
     });
+    expect(executeProgressCard).toHaveBeenCalledTimes(1);
 
     await harness.notify(
       itemNotification("item/started", { type: "contextCompaction", id: "compact-1" }),
@@ -2407,10 +2418,10 @@ describe("runCodexAppServerAttempt", () => {
     await harness.notify(
       itemNotification("item/completed", { type: "contextCompaction", id: "compact-1" }),
     );
-    const planRestoreRequest = harness.requests.find(
+    let planRestoreRequests = harness.requests.filter(
       (request) => request.method === "thread/inject_items",
     );
-    expect(planRestoreRequest?.params).toMatchObject({
+    expect(planRestoreRequests[0]?.params).toMatchObject({
       threadId: "thread-1",
       items: [
         {
@@ -2419,12 +2430,83 @@ describe("runCodexAppServerAttempt", () => {
           content: [
             {
               type: "input_text",
-              text: expect.stringContaining('"step":"Restore progress","status":"in_progress"'),
+              text: expect.stringContaining('"markdown":"Plan restored"'),
             },
           ],
         },
       ],
     });
+    expect(JSON.stringify(planRestoreRequests[0]?.params)).toContain("progress_card");
+
+    const nativePlan = [{ step: "Finish native projection", status: "in_progress" }];
+    await harness.notify({
+      method: "turn/plan/updated",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        explanation: "Native plan note",
+        plan: [{ step: "Finish native projection", status: "inProgress" }],
+      },
+    });
+    expect(executeProgressCard).toHaveBeenCalledTimes(2);
+    expect(executeProgressCard.mock.calls[1]?.[1]).toEqual({
+      markdown: "Native plan note",
+      plan: nativePlan,
+    });
+    await harness.notify(
+      itemNotification("item/started", { type: "contextCompaction", id: "compact-2" }),
+    );
+    await harness.notify(
+      itemNotification("item/completed", { type: "contextCompaction", id: "compact-2" }),
+    );
+    planRestoreRequests = harness.requests.filter(
+      (request) => request.method === "thread/inject_items",
+    );
+    expect(planRestoreRequests).toHaveLength(2);
+    expect(planRestoreRequests[1]?.params).toMatchObject({
+      items: [
+        {
+          content: [
+            {
+              text: expect.stringContaining('"markdown":"Native plan note"'),
+            },
+          ],
+        },
+      ],
+    });
+
+    const clearResponse = await harness.handleServerRequest({
+      id: "request-plan-clear",
+      method: "item/tool/call",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        callId: "call-plan-clear",
+        namespace: null,
+        tool: "progress_card",
+        arguments: {},
+      },
+    });
+    expect(clearResponse).toMatchObject({ success: true });
+    expect(executeProgressCard).toHaveBeenCalledTimes(3);
+    expect(onAgentEvent).toHaveBeenCalledWith({
+      stream: "plan",
+      data: {
+        phase: "update",
+        title: "Plan updated",
+        source: "openclaw",
+        steps: [],
+      },
+    });
+    await harness.notify(
+      itemNotification("item/started", { type: "contextCompaction", id: "compact-3" }),
+    );
+    await harness.notify(
+      itemNotification("item/completed", { type: "contextCompaction", id: "compact-3" }),
+    );
+    expect(
+      harness.requests.filter((request) => request.method === "thread/inject_items"),
+    ).toHaveLength(2);
 
     await harness.completeTurn({ threadId: "thread-1", turnId: "turn-1" });
     await run;
@@ -2479,11 +2561,11 @@ describe("runCodexAppServerAttempt", () => {
     expect(text).toBeDefined();
     const payloadText = text?.slice((text?.indexOf("\n") ?? -1) + 1) ?? "";
     const payload = JSON.parse(payloadText) as {
-      explanation?: string;
+      markdown?: string;
       plan: Array<{ step: string; status: string }>;
     };
     expect(Buffer.byteLength(payloadText, "utf8")).toBeLessThanOrEqual(32 * 1024);
-    expect(Buffer.byteLength(payload.explanation ?? "", "utf8")).toBeLessThanOrEqual(2 * 1024);
+    expect(Buffer.byteLength(payload.markdown ?? "", "utf8")).toBeLessThanOrEqual(2 * 1024);
     expect(payload.plan.length).toBeLessThanOrEqual(50);
     expect(payload.plan.every((step) => Buffer.byteLength(step.step, "utf8") <= 512)).toBe(true);
     expect(payload.plan[0]?.status).toBe("in_progress");
