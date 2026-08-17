@@ -3,7 +3,6 @@ import { resolveMutableAgentEntry } from "../agents/agent-scope.js";
 import { applyAgentConfig } from "../commands/agents.config.js";
 import { unsetConfigValueAtPath } from "../config/config-paths.js";
 import { mutateConfigFileWithRetry } from "../config/config.js";
-import type { AgentConfig } from "../config/types.agents.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import type { GitHubToolIdentityConfig } from "../config/types.tools.js";
 
@@ -39,7 +38,7 @@ export async function updateGitHubToolIdentityConfig(params: {
         return;
       }
 
-      let entry = resolveMutableAgentEntry(draft, params.agentId) as AgentConfig | undefined;
+      let entry = resolveMutableAgentEntry(draft, params.agentId);
       if (
         params.expectedIdentity !== undefined &&
         !sameIdentity(entry?.tools?.github, params.expectedIdentity)
@@ -48,7 +47,7 @@ export async function updateGitHubToolIdentityConfig(params: {
       }
       if (!entry && params.identity) {
         Object.assign(draft, applyAgentConfig(draft, { agentId: params.agentId }));
-        entry = resolveMutableAgentEntry(draft, params.agentId) as AgentConfig | undefined;
+        entry = resolveMutableAgentEntry(draft, params.agentId);
       }
       if (!entry) {
         return;

@@ -24,6 +24,7 @@ import type { ExecToolDefaults } from "./bash-tools.exec-types.js";
 import { type ExecWorkdirResolution, resolveExecWorkdir } from "./bash-tools.exec-workdir.js";
 import { buildSandboxEnv, coerceEnv } from "./bash-tools.shared.js";
 import type { BashSandboxConfig } from "./bash-tools.shared.js";
+import { prepareGitHubToolEnvironment } from "./github-tool-identity.js";
 import { sanitizeEnvVars } from "./sandbox/sanitize-env-vars.js";
 
 export type ExecToolArgs = Record<string, unknown> & {
@@ -172,6 +173,16 @@ export function resolveNotifyOnExitEmptySuccess(defaults?: ExecToolDefaults): bo
     return defaults.notifyOnExitEmptySuccess;
   }
   return normalizeChatChannelId(defaults?.messageProvider) !== null;
+}
+
+export function resolveExecPreparedRunEnvironment(defaults?: ExecToolDefaults) {
+  return (
+    defaults?.preparedRunEnvironment ??
+    prepareGitHubToolEnvironment({
+      config: defaults?.config ?? {},
+      agentId: defaults?.agentId ?? "main",
+    })
+  );
 }
 
 export function createExecRequestPreparation(params: {

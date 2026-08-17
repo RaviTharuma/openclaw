@@ -2,7 +2,7 @@ import type { AnyAgentTool } from "../tools/common.js";
 
 type AgentHarnessHostApprovalDecision = "allow-once" | "allow-always" | "deny";
 
-export type AgentHarnessPreparedEnvironment = Readonly<{
+type AgentHarnessPreparedEnvironment = Readonly<{
   credentialScrubEnv: Readonly<Record<string, string>>;
   localIdentityEnv: Readonly<Record<string, string>>;
   /** Non-secret fact used to select the local GitHub identity overlay. */

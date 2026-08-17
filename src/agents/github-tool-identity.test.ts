@@ -10,8 +10,6 @@ vi.mock("../process/exec.js", () => ({ runCommandBuffered: processMocks.runComma
 import {
   installManagedGitHubProfile,
   prepareGitHubToolEnvironment,
-  resolveGitHubToolLocalIdentityEnvironment,
-  resolveGitHubToolIdentity,
   resolveGitHubToolIdentityStatus,
   resolveManagedGitHubAgentKey,
   resolveManagedGitHubProfileDir,
@@ -65,10 +63,10 @@ describe("GitHub tool identity", () => {
       },
     };
 
-    expect(resolveGitHubToolIdentity({ config: {}, agentId: "main" })).toEqual({
-      source: "system-detected",
+    expect(prepareGitHubToolEnvironment({ config: {}, agentId: "main" })).toMatchObject({
+      localIdentityEnv: {},
+      managedLocalIdentity: false,
     });
-    expect(resolveGitHubToolLocalIdentityEnvironment({ config: {}, agentId: "main" })).toEqual({});
 
     const env = { OPENCLAW_STATE_DIR: stateDir };
     const expectedProfileDir = resolveManagedGitHubProfileDir({
@@ -77,26 +75,23 @@ describe("GitHub tool identity", () => {
       profileId: "ghp_22222222222222222222222222222222",
       env,
     });
-    const identity = resolveGitHubToolIdentity({ config, agentId: "main", env });
-    expect(identity).toMatchObject({
-      source: "agent-override",
-      config: { gitAuthor: { email: "agent@example.test" } },
-      profileDir: expectedProfileDir,
-    });
-    expect(resolveGitHubToolLocalIdentityEnvironment({ config, agentId: "main", env })).toEqual({
-      GH_CONFIG_DIR: expectedProfileDir,
-      GIT_AUTHOR_EMAIL: "agent@example.test",
-      GIT_COMMITTER_EMAIL: "agent@example.test",
-      GIT_CONFIG_COUNT: "1",
-      GIT_CONFIG_KEY_0: "user.email",
-      GIT_CONFIG_VALUE_0: "agent@example.test",
+    expect(prepareGitHubToolEnvironment({ config, agentId: "main", env })).toMatchObject({
+      localIdentityEnv: {
+        GH_CONFIG_DIR: expectedProfileDir,
+        GIT_AUTHOR_EMAIL: "agent@example.test",
+        GIT_COMMITTER_EMAIL: "agent@example.test",
+        GIT_CONFIG_COUNT: "1",
+        GIT_CONFIG_KEY_0: "user.email",
+        GIT_CONFIG_VALUE_0: "agent@example.test",
+      },
+      managedLocalIdentity: true,
     });
     const relocatedConfig = structuredClone(config);
     relocatedConfig.agents.entries.main.agentDir = path.join(stateDir, "relocated");
     expect(
-      resolveGitHubToolIdentity({ config: relocatedConfig, agentId: "main", env }),
+      prepareGitHubToolEnvironment({ config: relocatedConfig, agentId: "main", env }),
     ).toMatchObject({
-      profileDir: expectedProfileDir,
+      localIdentityEnv: { GH_CONFIG_DIR: expectedProfileDir },
     });
   });
 

@@ -221,24 +221,23 @@ describe("GitHubIdentityController", () => {
   it("invalidates an in-flight status on effective identity change and verifies once", async () => {
     const host = { requestUpdate: vi.fn() };
     const resolvers: Array<(value: typeof availableStatus) => void> = [];
-    const client = {
-      request: vi.fn(
-        async () =>
-          await new Promise<typeof availableStatus>((resolve) => {
-            resolvers.push(resolve);
-          }),
-      ),
-    } as unknown as GatewayBrowserClient;
+    const request = vi.fn(
+      async () =>
+        await new Promise<typeof availableStatus>((resolve) => {
+          resolvers.push(resolve);
+        }),
+    );
+    const client = { request } as unknown as GatewayBrowserClient;
     const controller = new GitHubIdentityController(host);
     const config = (profileId: string) => ({ tools: { github: { profileId } } });
     sync(controller, client, config("ghp_11111111111111111111111111111111"));
     const initial = controller.verify();
     await Promise.resolve();
-    expect(client.request).toHaveBeenCalledTimes(1);
+    expect(request).toHaveBeenCalledTimes(1);
     controller.setDraft("name", "dirty author");
     sync(controller, client, config("ghp_22222222222222222222222222222222"));
     await Promise.resolve();
-    expect(client.request).toHaveBeenCalledTimes(2);
+    expect(request).toHaveBeenCalledTimes(2);
     expect(controller.draft.name).toBe("dirty author");
 
     resolvers[0]?.(availableStatus);
@@ -246,7 +245,7 @@ describe("GitHubIdentityController", () => {
     await initial;
     await Promise.resolve();
     expect(controller.status).toEqual(availableStatus);
-    expect(client.request).toHaveBeenCalledTimes(2);
+    expect(request).toHaveBeenCalledTimes(2);
   });
 
   it("rejects status returned for a different agent", async () => {

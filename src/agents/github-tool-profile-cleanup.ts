@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { isManagedGitHubProfileId } from "../config/github-identity-profile-id.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
+import { hasErrnoCode } from "../infra/errno.js";
 import { listAgentIds, resolveAgentConfig } from "./agent-scope.js";
 import {
   resolveManagedGitHubAgentKey,
@@ -12,7 +13,7 @@ const MAX_CLEANUP_WARNINGS = 20;
 const STAGING_PROFILE_PREFIX = ".github-profile.staging-";
 const MANAGED_AGENT_KEY_PATTERN = /^[a-f0-9]{64}$/u;
 
-export type GitHubProfileCleanupResult = { removed: number; warnings: string[] };
+type GitHubProfileCleanupResult = { removed: number; warnings: string[] };
 
 async function cleanupProfileRoot(params: {
   root: string;
@@ -23,7 +24,7 @@ async function cleanupProfileRoot(params: {
   try {
     rootStat = await fs.lstat(params.root);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+    if (hasErrnoCode(error, "ENOENT")) {
       return 0;
     }
     throw error;
@@ -50,7 +51,7 @@ async function cleanupProfileRoot(params: {
     try {
       stat = await fs.lstat(candidate);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      if (hasErrnoCode(error, "ENOENT")) {
         continue;
       }
       throw error;
@@ -86,7 +87,7 @@ async function validateDirectDirectory(params: {
   try {
     stat = await fs.lstat(params.candidate);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+    if (hasErrnoCode(error, "ENOENT")) {
       return false;
     }
     throw error;
@@ -152,7 +153,7 @@ async function cleanupAgentProfileRegistry(params: {
   try {
     rootStat = await fs.lstat(params.root);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+    if (hasErrnoCode(error, "ENOENT")) {
       return 0;
     }
     throw error;

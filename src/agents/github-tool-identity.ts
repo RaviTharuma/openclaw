@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { isRecord } from "@openclaw/normalization-core/record-coerce";
 import { readNonBlankString } from "@openclaw/normalization-core/string-coerce";
 import type { ToolsGitHubStatusResult } from "../../packages/gateway-protocol/src/index.js";
 import { isManagedGitHubProfileId } from "../config/github-identity-profile-id.js";
@@ -17,7 +18,7 @@ const PROFILE_COMMAND_TIMEOUT_MS = 15_000;
 const PROFILE_OUTPUT_LIMIT_BYTES = 32 * 1024;
 const MANAGED_GITHUB_ROOT_SEGMENTS = ["credentials", "github"] as const;
 
-export type GitHubToolAccount = { login: string; avatarUrl: string | null };
+type GitHubToolAccount = { login: string; avatarUrl: string | null };
 
 export function createManagedGitHubProfileId(): string {
   return `ghp_${randomBytes(16).toString("hex")}`;
@@ -61,7 +62,7 @@ export function resolveConfiguredGitHubToolIdentity(params: {
     : params.config.tools?.github;
 }
 
-export function resolveGitHubToolIdentity(params: {
+function resolveGitHubToolIdentity(params: {
   config: OpenClawConfig;
   agentId: string;
   env?: NodeJS.ProcessEnv;
@@ -71,9 +72,11 @@ export function resolveGitHubToolIdentity(params: {
   if (!config) {
     return { source: "system-detected" as const };
   }
-  const source = agentOverride ? "agent-override" : "system-configured";
+  const source: "agent-override" | "system-configured" = agentOverride
+    ? "agent-override"
+    : "system-configured";
   return {
-    source: source as "agent-override" | "system-configured",
+    source,
     config,
     profileDir: resolveManagedGitHubProfileDir({
       agentId: params.agentId,
@@ -119,15 +122,6 @@ function localIdentityEnvironmentForIdentity(
     ...(author?.name ? { GIT_AUTHOR_NAME: author.name, GIT_COMMITTER_NAME: author.name } : {}),
     ...(author?.email ? { GIT_AUTHOR_EMAIL: author.email, GIT_COMMITTER_EMAIL: author.email } : {}),
   };
-}
-
-/** Non-secret managed identity overlay for local child processes. */
-export function resolveGitHubToolLocalIdentityEnvironment(params: {
-  config: OpenClawConfig;
-  agentId: string;
-  env?: NodeJS.ProcessEnv;
-}): Readonly<Record<string, string>> {
-  return localIdentityEnvironmentForIdentity(resolveGitHubToolIdentity(params));
 }
 
 /** Prepares the non-secret child overlay and store exclusions once per agent run. */
@@ -179,7 +173,10 @@ async function runIdentityCommand(
 
 function parseAccount(stdout: Buffer): GitHubToolAccount | undefined {
   try {
-    const value = JSON.parse(stdout.toString("utf8")) as { login?: unknown; avatarUrl?: unknown };
+    const value: unknown = JSON.parse(stdout.toString("utf8"));
+    if (!isRecord(value)) {
+      return undefined;
+    }
     const login = readNonBlankString(value.login)?.trim();
     if (!login) {
       return undefined;

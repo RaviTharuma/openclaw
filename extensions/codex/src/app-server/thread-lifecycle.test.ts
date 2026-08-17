@@ -13,6 +13,7 @@ import {
   CODEX_OPENCLAW_DIRECT_DYNAMIC_TOOL_NAMESPACE,
   type CodexDynamicToolFunctionSpec,
   type JsonObject,
+  isJsonObject,
 } from "./protocol.js";
 import {
   createCodexAppServerBindingStore,
@@ -130,7 +131,11 @@ describe("Codex managed shell environment", () => {
               threadId: "thread-1",
             });
 
-      expect(request.config?.shell_environment_policy).toMatchObject({
+      const shellEnvironmentPolicy = request.config?.shell_environment_policy;
+      if (!isJsonObject(shellEnvironmentPolicy)) {
+        throw new Error("expected shell environment policy");
+      }
+      expect(shellEnvironmentPolicy).toMatchObject({
         inherit,
         experimental_use_profile: false,
         exclude: ["GIT_*"],
@@ -143,8 +148,7 @@ describe("Codex managed shell environment", () => {
         },
       });
       expect(request.config?.allow_login_shell).toBe(false);
-      const includeOnly = (request.config?.shell_environment_policy as { include_only?: unknown[] })
-        .include_only;
+      const includeOnly = shellEnvironmentPolicy.include_only;
       expect(includeOnly).toHaveLength(5);
       expect(includeOnly).toEqual(
         expect.arrayContaining([
@@ -155,10 +159,8 @@ describe("Codex managed shell environment", () => {
           "PREVIEW_SERVICE_TOKEN",
         ]),
       );
-      const serializedPolicy = JSON.parse(JSON.stringify(request)).config
-        .shell_environment_policy as Record<string, unknown>;
-      expect(serializedPolicy.experimental_use_profile).toBe(false);
-      expect(serializedPolicy).not.toHaveProperty("use_profile");
+      expect(shellEnvironmentPolicy.experimental_use_profile).toBe(false);
+      expect(shellEnvironmentPolicy).not.toHaveProperty("use_profile");
     },
   );
 

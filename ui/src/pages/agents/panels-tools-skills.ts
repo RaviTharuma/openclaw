@@ -235,8 +235,11 @@ function renderGitHubIdentity(controller: GitHubIdentityController) {
         class="form-control"
         .value=${draft[field]}
         ?disabled=${disabled}
-        @input=${(event: Event) =>
-          controller.setDraft(field, (event.currentTarget as HTMLInputElement).value)}
+        @input=${(event: Event) => {
+          if (event.currentTarget instanceof HTMLInputElement) {
+            controller.setDraft(field, event.currentTarget.value);
+          }
+        }}
       />
     </label>
   `;
@@ -286,10 +289,15 @@ function renderGitHubIdentity(controller: GitHubIdentityController) {
                 class="form-control"
                 .value=${controller.scope}
                 ?disabled=${controller.busy}
-                @change=${(event: Event) =>
-                  controller.selectScope(
-                    (event.currentTarget as HTMLSelectElement).value as "system" | "agent",
-                  )}
+                @change=${(event: Event) => {
+                  if (!(event.currentTarget instanceof HTMLSelectElement)) {
+                    return;
+                  }
+                  const scope = event.currentTarget.value;
+                  if (scope === "system" || scope === "agent") {
+                    controller.selectScope(scope);
+                  }
+                }}
               >
                 <option value="system">${t("agentTools.githubSystem")}</option>
                 <option value="agent">${t("agentTools.githubAgentOverride")}</option>

@@ -1,3 +1,4 @@
+import { isRecord } from "@openclaw/normalization-core/record-coerce";
 import type { GatewayBrowserClient } from "../../api/gateway.ts";
 import type { ToolsGitHubStatusResult } from "../../api/types.ts";
 import { t } from "../../i18n/index.ts";
@@ -5,12 +6,8 @@ import { resolveAgentConfig } from "../../lib/agents/display.ts";
 import { formatUiError } from "../../lib/format-error.ts";
 import { generateUUID } from "../../lib/uuid.ts";
 
-export type GitHubIdentityScope = "system" | "agent";
-export type GitHubIdentityDraft = { token: string; name: string; email: string };
-
-type GitHubConfigValue = {
-  gitAuthor?: { name?: unknown; email?: unknown };
-};
+type GitHubIdentityScope = "system" | "agent";
+type GitHubIdentityDraft = { token: string; name: string; email: string };
 
 type RequestOwner = {
   client: GatewayBrowserClient;
@@ -25,11 +22,12 @@ function configFingerprint(value: unknown): string {
 }
 
 function readDraft(value: unknown): GitHubIdentityDraft {
-  const github = value && typeof value === "object" ? (value as GitHubConfigValue) : undefined;
+  const github = isRecord(value) ? value : undefined;
+  const gitAuthor = isRecord(github?.gitAuthor) ? github.gitAuthor : undefined;
   return {
     token: "",
-    name: typeof github?.gitAuthor?.name === "string" ? github.gitAuthor.name : "",
-    email: typeof github?.gitAuthor?.email === "string" ? github.gitAuthor.email : "",
+    name: typeof gitAuthor?.name === "string" ? gitAuthor.name : "",
+    email: typeof gitAuthor?.email === "string" ? gitAuthor.email : "",
   };
 }
 
