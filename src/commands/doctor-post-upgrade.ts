@@ -145,15 +145,6 @@ async function resolvePackageJsonRelPath(
   }
 }
 
-async function sha256OfFile(absPath: string): Promise<string | null> {
-  try {
-    const raw = await fs.readFile(absPath);
-    return crypto.createHash("sha256").update(raw).digest("hex");
-  } catch {
-    return null;
-  }
-}
-
 /** Runs post-upgrade plugin probes and returns structured findings for the caller to render. */
 export async function runPostUpgradeProbes(params: {
   installsPath?: string;
@@ -229,8 +220,21 @@ export async function runPostUpgradeProbes(params: {
     }
 
     if (record.manifestPath && record.manifestHash) {
-      const currentHash = await sha256OfFile(record.manifestPath);
-      if (currentHash && currentHash !== record.manifestHash) {
+      let currentHash: string;
+      try {
+        const raw = await fs.readFile(record.manifestPath);
+        currentHash = crypto.createHash("sha256").update(raw).digest("hex");
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err);
+        findings.push({
+          level: "error",
+          code: "plugin.manifest_unavailable",
+          message: `Plugin ${record.pluginId}: could not read indexed manifest (${record.manifestPath}): ${reason}. Reinstall the plugin or run \`openclaw plugins registry --refresh\`.`,
+          plugin: record.pluginId,
+        });
+        continue;
+      }
+      if (currentHash !== record.manifestHash) {
         findings.push({
           level: "warn",
           code: "plugin.manifest_drift",

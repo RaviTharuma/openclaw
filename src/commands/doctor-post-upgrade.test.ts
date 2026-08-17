@@ -617,4 +617,31 @@ describe("runPostUpgradeProbes — plugin.manifest_drift", () => {
       expect(finding?.plugin).toBe("drifted");
     });
   });
+
+  it("returns an error when an indexed manifest is no longer readable", async () => {
+    await withFixtureRoot("manifest-missing", async (root) => {
+      const { installsPath, manifestPath } = await writePluginFixture(root, {
+        id: "missing-manifest",
+        packageJson: {
+          name: "missing-manifest",
+          version: "0.0.1",
+          type: "module",
+          openclaw: { extensions: ["./dist/index.js"] },
+        },
+        files: { "dist/index.js": "export default {};" },
+        manifestHash: "indexed-manifest-hash",
+      });
+      await fs.rm(manifestPath);
+
+      const report = await runPostUpgradeProbes({ installsPath });
+
+      expect(report.findings).toEqual([
+        expect.objectContaining({
+          level: "error",
+          code: "plugin.manifest_unavailable",
+          plugin: "missing-manifest",
+        }),
+      ]);
+    });
+  });
 });
