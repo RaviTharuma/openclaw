@@ -2,6 +2,9 @@ import CryptoKit
 import Darwin
 import Foundation
 import OpenClawNativeState
+#if canImport(Security)
+import Security
+#endif
 import SQLite3
 
 enum DeviceIdentitySQLiteStore {
@@ -13,6 +16,20 @@ enum DeviceIdentitySQLiteStore {
     private static let maximumLegacyIdentityBytes = 64 * 1024
     private static let doctorClaimSuffix = ".doctor-importing"
     private static let nativeClaimSuffix = ".native-importing"
+    private static let appSandboxed: Bool = {
+        #if os(macOS) && canImport(Security)
+        guard let task = SecTaskCreateFromSelf(nil) else {
+            return ProcessInfo.processInfo.environment["APP_SANDBOX_CONTAINER_ID"] != nil
+        }
+        let value = SecTaskCopyValueForEntitlement(
+            task,
+            "com.apple.security.app-sandbox" as CFString,
+            nil)
+        return (value as? Bool) == true
+        #else
+        return true
+        #endif
+    }()
 
     private struct LegacyClaim {
         let source: DeviceIdentityPaths.LegacyIdentitySource
@@ -252,6 +269,19 @@ enum DeviceIdentitySQLiteStore {
         return authoritative.identity
     }
 
+    static func resolveStateLifecycleRuntimeDirectory(
+        destinationStateDirURL: URL,
+        appSandboxed: Bool) -> URL
+    {
+        if !appSandboxed {
+            return URL(fileURLWithPath: "/tmp", isDirectory: true)
+        }
+        // Sandboxed app and extension processes share the selected state container,
+        // while global /tmp is not a writable cross-process namespace for them.
+        return destinationStateDirURL.standardizedFileURL
+            .appendingPathComponent("tmp", isDirectory: true)
+    }
+
     static func resolveStateDatabaseCoordinatorURL(
         databaseURL: URL,
         runtimeDirectory: URL,
@@ -293,7 +323,9 @@ enum DeviceIdentitySQLiteStore {
         let coordinatorURLs = [
             self.resolveStateDatabaseCoordinatorURL(
                 databaseURL: databaseURL,
-                runtimeDirectory: URL(fileURLWithPath: "/tmp", isDirectory: true),
+                runtimeDirectory: self.resolveStateLifecycleRuntimeDirectory(
+                    destinationStateDirURL: destinationStateDirURL,
+                    appSandboxed: self.appSandboxed),
                 uid: getuid()),
         ] + self.resolveDeviceIdentityCoordinatorURLs(
             databaseURL: databaseURL,
