@@ -21,17 +21,20 @@ function sanitizeToolFragment(raw: string, fallback: string, maxChars?: number):
   return providerSafe.length > maxChars ? providerSafe.slice(0, maxChars) : providerSafe;
 }
 
-/** Sanitize one MCP server name and reserve it in the provided set. */
-export function sanitizeServerName(raw: string, usedNames: Set<string>): string {
+function resolveServerNameBase(raw: string): { base: string; reservedFallback: boolean } {
   const sanitized = sanitizeToolFragment(raw, "mcp", TOOL_NAME_MAX_PREFIX);
   // Keep dynamically materialized tools out of the conventional native-MCP
   // mcp/mcp__* namespace so both surfaces can remain callable together.
-  const base =
-    sanitized === "mcp"
-      ? "mcp-server"
-      : sanitized.startsWith("mcp__")
-        ? `mcp-${sanitized.slice("mcp__".length)}`
-        : sanitized;
+  if (sanitized === "mcp") {
+    return { base: "mcp-server", reservedFallback: true };
+  }
+  if (sanitized.startsWith("mcp__")) {
+    return { base: `mcp-${sanitized.slice("mcp__".length)}`, reservedFallback: true };
+  }
+  return { base: sanitized, reservedFallback: false };
+}
+
+function reserveServerName(base: string, usedNames: Set<string>): string {
   let candidate = base;
   let n = 2;
   while (usedNames.has(normalizeLowercaseStringOrEmpty(candidate))) {
@@ -43,17 +46,40 @@ export function sanitizeServerName(raw: string, usedNames: Set<string>): string 
   return candidate;
 }
 
+/** Sanitize one MCP server name and reserve it in the provided set. */
+export function sanitizeServerName(raw: string, usedNames: Set<string>): string {
+  return reserveServerName(resolveServerNameBase(raw).base, usedNames);
+}
+
 /**
  * Assign safe server names from the full declared set in declaration order,
- * independent of which servers resolve for a requester. Declaration order
- * preserves legacy collision-suffix ownership for existing static configs;
- * sorting here would silently swap safe names between colliding servers.
+ * independent of which servers resolve for a requester. Non-reserved names
+ * retain legacy collision-suffix ownership; reserved fallbacks allocate around
+ * those assignments so they cannot displace an existing safe server id.
  */
 export function assignSafeServerNames(serverNames: Iterable<string>): Map<string, string> {
+  const entries = Array.from(serverNames, (serverName) => ({
+    serverName,
+    ...resolveServerNameBase(serverName),
+  }));
   const usedNames = new Set<string>();
+  const assignedNames = entries.map<string | undefined>(() => undefined);
+  for (const [index, entry] of entries.entries()) {
+    if (!entry.reservedFallback) {
+      assignedNames[index] = reserveServerName(entry.base, usedNames);
+    }
+  }
+  for (const [index, entry] of entries.entries()) {
+    if (entry.reservedFallback) {
+      assignedNames[index] = reserveServerName(entry.base, usedNames);
+    }
+  }
   const assignments = new Map<string, string>();
-  for (const serverName of serverNames) {
-    assignments.set(serverName, sanitizeServerName(serverName, usedNames));
+  for (const [index, entry] of entries.entries()) {
+    const assignedName = assignedNames[index];
+    if (assignedName) {
+      assignments.set(entry.serverName, assignedName);
+    }
   }
   return assignments;
 }
