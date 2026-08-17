@@ -406,7 +406,6 @@ export async function removeStateAndLinkedPaths(
         `Cannot remove OpenClaw state while preserving ${shortenHomeInString(overlappingPreservePath)} because it overlaps the active state lock. Move the workspace outside the lock directory and retry.`,
       );
     }
-    await removeLinkedCleanupPaths(cleanup, runtime);
     const stateRemoval = await removePathPreserving(
       stateDir,
       [...preservePaths, lockDir],
@@ -441,6 +440,7 @@ export async function removeStateAndLinkedPaths(
     if (stateDirRemoved) {
       await removeStateDirectoryAlias(requestedStateDir, stateDir);
     }
+    await removeLinkedCleanupPaths(cleanup, runtime);
     return true;
   } finally {
     try {

@@ -261,6 +261,48 @@ describe("cleanup path removals", () => {
     },
   );
 
+  it("preserves linked paths when guarded state removal fails", async () => {
+    const runtime = createRuntimeMock();
+    const tmpRoot = await fs.realpath(tempDirs.make("openclaw-cleanup-state-failure-"));
+    const stateDir = path.join(tmpRoot, "state");
+    const configPath = path.join(tmpRoot, "openclaw.json");
+    const oauthDir = path.join(tmpRoot, "credentials");
+    const oauthPath = path.join(oauthDir, "token.json");
+    const markerPath = path.join(stateDir, "marker.txt");
+    await fs.mkdir(stateDir);
+    await fs.mkdir(oauthDir);
+    await fs.writeFile(markerPath, "remove me");
+    await fs.writeFile(configPath, "{}\n");
+    await fs.writeFile(oauthPath, "keep me");
+    const realRm = fs.rm;
+    const rmSpy = vi.spyOn(fs, "rm").mockImplementation(async (target, options) => {
+      if (target === markerPath) {
+        throw new Error("simulated state removal failure");
+      }
+      return await realRm(target, options);
+    });
+
+    try {
+      await expect(
+        removeStateAndLinkedPaths(
+          {
+            stateDir,
+            configPath,
+            oauthDir,
+            configInsideState: false,
+            oauthInsideState: false,
+          },
+          runtime,
+        ),
+      ).rejects.toThrow(/Failed to remove non-preserved OpenClaw state/);
+
+      await expect(fs.readFile(configPath, "utf8")).resolves.toBe("{}\n");
+      await expect(fs.readFile(oauthPath, "utf8")).resolves.toBe("keep me");
+    } finally {
+      rmSpy.mockRestore();
+    }
+  });
+
   it("rejects a preserved workspace overlapping the active lock before cleanup", async () => {
     const runtime = createRuntimeMock();
     const tmpRoot = await fs.realpath(tempDirs.make("openclaw-cleanup-lock-overlap-"));

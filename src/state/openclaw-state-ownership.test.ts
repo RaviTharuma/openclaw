@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useAutoCleanupTempDirTracker } from "../../test/helpers/temp-dir.js";
@@ -93,7 +94,11 @@ function snapshotSqliteFamily(databasePath: string) {
 
 function resolveExpectedOwnershipCoordinatorPath(databasePath: string): string {
   const canonicalDatabasePath = resolvePathViaExistingAncestorSync(databasePath);
-  const canonicalRuntimeDirectory = resolvePathViaExistingAncestorSync("/tmp");
+  const runtimeDirectory =
+    process.platform === "win32"
+      ? path.join(os.homedir(), "AppData", "Local", "OpenClaw", "locks")
+      : "/tmp";
+  const canonicalRuntimeDirectory = resolvePathViaExistingAncestorSync(runtimeDirectory);
   const suffix =
     typeof process.getuid === "function"
       ? `openclaw-state-locks-${process.getuid()}`
