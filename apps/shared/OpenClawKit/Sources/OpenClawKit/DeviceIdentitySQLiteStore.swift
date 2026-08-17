@@ -276,8 +276,8 @@ enum DeviceIdentitySQLiteStore {
         if !appSandboxed {
             return URL(fileURLWithPath: "/tmp", isDirectory: true)
         }
-        // Sandboxed app and extension processes share the selected state container,
-        // while global /tmp is not a writable cross-process namespace for them.
+        // Sandboxed app and extension processes share container-owned state that Node cannot
+        // traverse. CLI-shared macOS state is unentitled and uses the common /tmp namespace.
         return destinationStateDirURL.standardizedFileURL
             .appendingPathComponent("tmp", isDirectory: true)
     }
