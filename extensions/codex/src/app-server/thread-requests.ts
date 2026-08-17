@@ -467,10 +467,7 @@ export function buildCodexRuntimeThreadConfigForRun(
           ...runtimeConfig,
           ...CODEX_LIGHTWEIGHT_CONTEXT_THREAD_CONFIG,
         });
-  return applyCodexManagedShellEnvironment(
-    contextConfig,
-    options.shellEnvironment,
-  );
+  return applyCodexManagedShellEnvironment(contextConfig, options.shellEnvironment);
 }
 
 export function buildCodexRingZeroThreadConfigPatch(
