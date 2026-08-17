@@ -416,15 +416,10 @@ export async function removeStateAndLinkedPaths(
       throw new Error("Failed to remove non-preserved OpenClaw state while ownership was held.");
     }
 
-    // The external lifecycle coordinator remains held through lock-directory
-    // detachment and state-root removal. Windows releases only the in-tree handles first.
-    if (process.platform === "win32") {
-      await lock.releaseInTree();
-    }
+    // Drop only the removable in-tree handles; external Gateway presence stays held
+    // through finalization so a new owner cannot start inside the cleanup window.
+    await lock.releaseInTree();
     const lockTombstone = await detachStateLockDirectory(lockDir, stateDir, runtime);
-    if (process.platform !== "win32") {
-      await releaseLock();
-    }
     if (!(await removePath(lockTombstone, runtime, { label: "detached state locks" })).ok) {
       throw new Error(`Failed to remove detached state locks at ${lockTombstone}.`);
     }

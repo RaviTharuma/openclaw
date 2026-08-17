@@ -1,7 +1,10 @@
 // Cleanup utility tests cover filesystem cleanup helpers, temp paths, and command runtime behavior.
+import { spawn } from "node:child_process";
+import { once } from "node:events";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { expectDefined } from "@openclaw/normalization-core";
 import { afterEach, beforeEach, describe, expect, it, test, vi } from "vitest";
 import { useAutoCleanupTempDirTracker } from "../../test/helpers/temp-dir.js";
@@ -12,6 +15,50 @@ import type { RuntimeEnv } from "../runtime.js";
 import { withEnvAsync } from "../test-utils/env.js";
 
 const tempDirs = useAutoCleanupTempDirTracker(afterEach);
+
+async function attemptGatewayLockInChild(env: NodeJS.ProcessEnv): Promise<string> {
+  const lockModuleUrl = pathToFileURL(path.resolve("src/infra/gateway-lock.ts")).href;
+  const script = `
+    const { acquireGatewayLock } = await import(${JSON.stringify(lockModuleUrl)});
+    const report = (message) => process.send?.(message, () => process.exit(0));
+    try {
+      const lock = await acquireGatewayLock({
+        allowInTests: true,
+        env: process.env,
+        pollIntervalMs: 2,
+        timeoutMs: 15,
+      });
+      await lock?.release();
+      report("acquired");
+    } catch {
+      report("blocked");
+    }
+  `;
+  const childEnv = { ...env };
+  delete childEnv.NODE_ENV;
+  delete childEnv.VITEST;
+  delete childEnv.VITEST_POOL_ID;
+  delete childEnv.VITEST_WORKER_ID;
+  const child = spawn(
+    process.execPath,
+    ["--import", "tsx", "--input-type=module", "--eval", script, "openclaw", "gateway"],
+    { cwd: path.resolve("."), env: childEnv, stdio: ["ignore", "ignore", "pipe", "ipc"] },
+  );
+  const stderr: Buffer[] = [];
+  child.stderr?.on("data", (chunk: Buffer) => stderr.push(chunk));
+  const message = await Promise.race([
+    once(child, "message").then(([value]) => String(value)),
+    once(child, "exit").then(([code, signal]) => {
+      throw new Error(
+        `Gateway lock probe exited before reporting (${code ?? signal}): ${Buffer.concat(stderr).toString("utf8")}`,
+      );
+    }),
+  ]);
+  if (child.exitCode === null && child.signalCode === null) {
+    await once(child, "exit");
+  }
+  return message;
+}
 
 const workspaceStateMocks = vi.hoisted(() => ({
   deleteWorkspaceState: vi.fn(),
@@ -184,6 +231,64 @@ describe("cleanup path removals", () => {
       continueRemoval();
       await expect(cleanup).resolves.toBe(true);
       await expect(fs.access(stateDir)).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      continueRemoval();
+      rmSpy.mockRestore();
+    }
+  });
+
+  it("retains external Gateway ownership through linked-path cleanup", async () => {
+    const runtime = createRuntimeMock();
+    const tmpRoot = await fs.realpath(tempDirs.make("openclaw-cleanup-finalization-lock-"));
+    const stateDir = path.join(tmpRoot, "state");
+    const configPath = path.join(tmpRoot, "openclaw.json");
+    const markerPath = path.join(stateDir, "marker.txt");
+    await fs.mkdir(stateDir);
+    await fs.writeFile(markerPath, "remove me");
+    await fs.writeFile(configPath, "{}\n");
+    let continueRemoval = () => {};
+    const removalMayContinue = new Promise<void>((resolve) => {
+      continueRemoval = resolve;
+    });
+    let markLinkedRemovalStarted = () => {};
+    const linkedRemovalStarted = new Promise<void>((resolve) => {
+      markLinkedRemovalStarted = resolve;
+    });
+    const realRm = fs.rm;
+    const rmSpy = vi.spyOn(fs, "rm").mockImplementation(async (target, options) => {
+      if (target === configPath) {
+        markLinkedRemovalStarted();
+        await removalMayContinue;
+      }
+      return await realRm(target, options);
+    });
+    const env = {
+      ...process.env,
+      OPENCLAW_CONFIG_PATH: configPath,
+      OPENCLAW_STATE_DIR: stateDir,
+    };
+
+    try {
+      const cleanup = removeStateAndLinkedPaths(
+        {
+          stateDir,
+          configPath,
+          oauthDir: path.join(stateDir, "credentials"),
+          configInsideState: false,
+          oauthInsideState: true,
+        },
+        runtime,
+      );
+      await linkedRemovalStarted;
+
+      const lockAttempt = await attemptGatewayLockInChild(env);
+      continueRemoval();
+      const [cleanupResult] = await Promise.allSettled([cleanup]);
+
+      expect(lockAttempt).toBe("blocked");
+      expect(cleanupResult).toEqual({ status: "fulfilled", value: true });
+      await expect(fs.access(stateDir)).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(fs.access(configPath)).rejects.toMatchObject({ code: "ENOENT" });
     } finally {
       continueRemoval();
       rmSpy.mockRestore();
