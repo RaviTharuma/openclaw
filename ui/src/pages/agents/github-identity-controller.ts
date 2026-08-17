@@ -255,7 +255,7 @@ export class GitHubIdentityController {
     let stored = false;
     let secretName = "";
     try {
-      secretName = `OPENCLAW_GITHUB_SETUP_${generateUUID().replaceAll("-", "").toUpperCase()}`;
+      secretName = `github-setup-${generateUUID().replaceAll("-", "").toLowerCase()}`;
       await owner.client.request("secrets.store.set", {
         name: secretName,
         value: draft.token,

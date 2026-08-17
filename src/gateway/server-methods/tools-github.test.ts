@@ -104,7 +104,7 @@ describe("tools.github handlers", () => {
       scope: "agent",
       agentId: "main",
       mode: "managed",
-      secretName: "OPENCLAW_GITHUB_SETUP_11111111111111111111111111111111",
+      secretName: "github-setup-11111111111111111111111111111111",
       gitAuthor: { name: "Managed Author" },
     });
 
@@ -144,7 +144,7 @@ describe("tools.github handlers", () => {
       scope: "system",
       agentId: "main",
       mode: "managed",
-      secretName: "OPENCLAW_GITHUB_SETUP_22222222222222222222222222222222",
+      secretName: "github-setup-22222222222222222222222222222222",
     });
 
     expect(github.install).not.toHaveBeenCalled();
@@ -159,7 +159,7 @@ describe("tools.github handlers", () => {
       scope: "system",
       agentId: "main",
       mode: "managed",
-      secretName: "OPENCLAW_GITHUB_SETUP_33333333333333333333333333333333",
+      secretName: "github-setup-33333333333333333333333333333333",
     });
 
     expect(secrets.consumeHandoff.mock.invocationCallOrder[0]).toBeLessThan(

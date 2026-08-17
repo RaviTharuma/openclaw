@@ -29,6 +29,13 @@ function createDatabaseOptions() {
   return { path: path.join(root, "state.sqlite") };
 }
 
+function countStoredRows(database: ReturnType<typeof createDatabaseOptions>, name: string): number {
+  const row = openOpenClawStateDatabase(database)
+    .db.prepare("SELECT COUNT(*) AS count FROM secret_store_entries WHERE name = ?")
+    .get(name) as { count: number };
+  return row.count;
+}
+
 afterEach(() => {
   vi.useRealTimers();
   closeOpenClawStateDatabaseForTest();
@@ -40,7 +47,7 @@ afterEach(() => {
 describe("secret store", () => {
   it("consumes only a fresh, unbound GitHub setup handoff", () => {
     const database = createDatabaseOptions();
-    const name = "OPENCLAW_GITHUB_SETUP_11111111111111111111111111111111";
+    const name = "github-setup-11111111111111111111111111111111";
     writeSecretStoreEntry({
       scope: team,
       name,
@@ -60,6 +67,7 @@ describe("secret store", () => {
     });
 
     expect(consumeGitHubSetupHandoff({ name, database })).toBe("temporary-value");
+    expect(countStoredRows(database, name)).toBe(0);
     expect(consumeGitHubSetupHandoff({ name, database })).toBeUndefined();
     expect(consumeGitHubSetupHandoff({ name: "DEPLOY_TOKEN", database })).toBeUndefined();
     expect(readSecretStoreValue({ scope: team, name: "DEPLOY_TOKEN", database })).toEqual({
@@ -151,7 +159,7 @@ describe("secret store", () => {
     vi.setSystemTime(now - ageMs);
     writeSecretStoreEntry({
       scope: team,
-      name: "OPENCLAW_GITHUB_SETUP_22222222222222222222222222222222",
+      name: "github-setup-22222222222222222222222222222222",
       value: "temporary-value",
       kind,
       ...(allowedHosts ? { allowedHosts } : {}),
@@ -160,7 +168,7 @@ describe("secret store", () => {
     });
     expect(
       consumeGitHubSetupHandoff({
-        name: "OPENCLAW_GITHUB_SETUP_22222222222222222222222222222222",
+        name: "github-setup-22222222222222222222222222222222",
         nowMs: now,
         database,
       }),
@@ -169,7 +177,7 @@ describe("secret store", () => {
 
   it("keeps setup handoffs out of listings and exec and hard-deletes abandoned generations", () => {
     const database = createDatabaseOptions();
-    const name = "OPENCLAW_GITHUB_SETUP_33333333333333333333333333333333";
+    const name = "github-setup-33333333333333333333333333333333";
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
     writeSecretStoreEntry({
@@ -206,7 +214,7 @@ describe("secret store", () => {
       "UNRELATED_SECRET",
     ]);
     expect(purgeExpiredSecretStoreEntries({ database })).toBe(1);
-    expect(readSecretStoreValue({ scope: team, name, database }).ok).toBe(false);
+    expect(countStoredRows(database, name)).toBe(0);
     expect(readSecretStoreValue({ scope: team, name: "UNRELATED_SECRET", database })).toEqual({
       ok: true,
       value: "keep-value",
@@ -215,7 +223,7 @@ describe("secret store", () => {
 
   it("hard-deletes reserved setup names while ordinary secrets remain soft-deleted", () => {
     const database = createDatabaseOptions();
-    const name = "OPENCLAW_GITHUB_SETUP_44444444444444444444444444444444";
+    const name = "github-setup-44444444444444444444444444444444";
     writeSecretStoreEntry({
       scope: team,
       name,
@@ -225,7 +233,7 @@ describe("secret store", () => {
       database,
     });
     deleteSecretStoreEntry({ scope: team, name, database });
-    expect(listSecretStoreEntries({ scope: team, includeDeleted: true, database })).toEqual([]);
+    expect(countStoredRows(database, name)).toBe(0);
   });
 
   it("makes duplicate team rows impossible at the schema boundary", () => {
@@ -256,6 +264,16 @@ describe("secret store", () => {
         name: "lowercase",
         value: "value",
         kind: "env",
+        updatedBy: null,
+        database,
+      }),
+    ).toThrow(expect.objectContaining({ code: "SECRET_STORE_INVALID_NAME" }));
+    expect(() =>
+      writeSecretStoreEntry({
+        scope: team,
+        name: "github-setup-token",
+        value: "value",
+        kind: "secret",
         updatedBy: null,
         database,
       }),

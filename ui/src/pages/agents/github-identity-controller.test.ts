@@ -128,7 +128,7 @@ describe("GitHubIdentityController", () => {
 
     await controller.configure();
 
-    expect(requests[0]?.params.name).toMatch(/^OPENCLAW_GITHUB_SETUP_[A-F0-9]{32}$/u);
+    expect(requests[0]?.params.name).toMatch(/^github-setup-[a-f0-9]{32}$/u);
     expect(requests[1]?.params.secretName).toBe(requests[0]?.params.name);
     expect(controller.error).toBeNull();
   });

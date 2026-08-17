@@ -3,6 +3,7 @@ import type { Static } from "typebox";
 import { Type } from "typebox";
 import { closedObject } from "./closed-object.js";
 import { NonEmptyString } from "./primitives.js";
+import { GitHubSetupHandleSchema } from "./secrets.js";
 
 /**
  * Agent, model, skill, and tool catalog schemas.
@@ -1044,7 +1045,7 @@ export const ToolsGitHubConfigureParamsSchema = Type.Union([
     scope: Type.Literal("system"),
     agentId: NonEmptyString,
     mode: Type.Literal("managed"),
-    secretName: NonEmptyString,
+    secretName: GitHubSetupHandleSchema,
     gitAuthor: Type.Optional(
       closedObject({
         name: Type.Optional(NonEmptyString),
@@ -1061,7 +1062,7 @@ export const ToolsGitHubConfigureParamsSchema = Type.Union([
     scope: Type.Literal("agent"),
     agentId: NonEmptyString,
     mode: Type.Literal("managed"),
-    secretName: NonEmptyString,
+    secretName: GitHubSetupHandleSchema,
     gitAuthor: Type.Optional(
       closedObject({
         name: Type.Optional(NonEmptyString),

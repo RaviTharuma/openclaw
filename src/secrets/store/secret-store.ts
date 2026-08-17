@@ -73,18 +73,27 @@ export class SecretStoreValidationError extends Error {
 export const SECRET_STORE_VALUE_MAX_BYTES = 64 * 1024;
 export const SECRET_STORE_ALLOWED_HOSTS_MAX = 128;
 const SECRET_STORE_RETENTION_MS = 30 * 24 * 60 * 60_000;
-const GITHUB_SETUP_HANDOFF_PATTERN = /^OPENCLAW_GITHUB_SETUP_[A-F0-9]{32}$/u;
+const GITHUB_SETUP_HANDOFF_PATTERN = /^github-setup-[a-f0-9]{32}$/u;
 const GITHUB_SETUP_HANDOFF_MAX_AGE_MS = 10 * 60_000;
 
 function normalizeScope(_scope: SecretStoreScope): { scopeKind: "team"; scopeId: "" } {
   return { scopeKind: "team", scopeId: "" };
 }
 
-function assertSecretStoreName(name: string): void {
+function assertSecretStoreEnvName(name: string): void {
   if (!ENV_SECRET_REF_ID_RE.test(name)) {
     throw new SecretStoreValidationError(
       "SECRET_STORE_INVALID_NAME",
       `Secret store name must match ${String(ENV_SECRET_REF_ID_RE)}.`,
+    );
+  }
+}
+
+function assertSecretStoreMutationName(name: string): void {
+  if (!ENV_SECRET_REF_ID_RE.test(name) && !GITHUB_SETUP_HANDOFF_PATTERN.test(name)) {
+    throw new SecretStoreValidationError(
+      "SECRET_STORE_INVALID_NAME",
+      `Secret store name must match ${String(ENV_SECRET_REF_ID_RE)} or ${String(GITHUB_SETUP_HANDOFF_PATTERN)}.`,
     );
   }
 }
@@ -358,7 +367,7 @@ export function readSecretStoreValue(params: {
   database?: OpenClawStateDatabaseOptions;
 }): Result<string, SecretStoreReadError> {
   try {
-    assertSecretStoreName(params.name);
+    assertSecretStoreEnvName(params.name);
     const { scopeKind, scopeId } = normalizeScope(params.scope);
     const row = withExistingOpenClawStateDatabaseReadOnly(({ db: sqlite }) => {
       const db = getNodeSqliteKysely<SecretStoreDatabase>(sqlite);
@@ -410,7 +419,7 @@ export function writeSecretStoreEntry(params: {
   updatedBy: string | null;
   database?: OpenClawStateDatabaseOptions;
 }): void {
-  assertSecretStoreName(params.name);
+  assertSecretStoreMutationName(params.name);
   assertSecretStoreValue(params.value, params.kind);
   if (params.kind === "env" && params.allowedHosts !== undefined) {
     throw new SecretStoreValidationError(
@@ -473,7 +482,7 @@ export function updateSecretStoreAllowedHosts(params: {
   updatedBy: string | null;
   database?: OpenClawStateDatabaseOptions;
 }): void {
-  assertSecretStoreName(params.name);
+  assertSecretStoreEnvName(params.name);
   const allowedHosts = normalizeSecretAllowedHosts(params.allowedHosts);
   const { scopeKind, scopeId } = normalizeScope(params.scope);
   const now = Date.now();
@@ -513,7 +522,7 @@ export function deleteSecretStoreEntry(params: {
   name: string;
   database?: OpenClawStateDatabaseOptions;
 }): void {
-  assertSecretStoreName(params.name);
+  assertSecretStoreMutationName(params.name);
   const { scopeKind, scopeId } = normalizeScope(params.scope);
   const state = openOpenClawStateDatabase(params.database);
   const now = Date.now();

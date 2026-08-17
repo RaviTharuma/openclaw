@@ -7,13 +7,18 @@ import {
 
 describe("GitHub tools protocol", () => {
   it.each([
-    { scope: "system", agentId: "main", mode: "managed", secretName: "ONE_USE_HANDOFF" },
+    {
+      scope: "system",
+      agentId: "main",
+      mode: "managed",
+      secretName: "github-setup-11111111111111111111111111111111",
+    },
     { scope: "system", agentId: "main", mode: "inherit" },
     {
       scope: "agent",
       agentId: "main",
       mode: "managed",
-      secretName: "ONE_USE_HANDOFF",
+      secretName: "github-setup-22222222222222222222222222222222",
       gitAuthor: { name: "Agent" },
     },
     { scope: "agent", agentId: "main", mode: "inherit" },
@@ -25,6 +30,8 @@ describe("GitHub tools protocol", () => {
     { scope: "system", mode: "inherit" },
     { scope: "agent", mode: "inherit" },
     { scope: "system", mode: "managed" },
+    { scope: "system", agentId: "main", mode: "managed", secretName: "ONE_USE_HANDOFF" },
+    { scope: "system", agentId: "main", mode: "managed", secretName: "github-setup-token" },
     { scope: "agent", agentId: "main", mode: "managed", secretName: "HANDOFF", extra: true },
   ])("rejects impossible configure action %#", (action) => {
     expect(Value.Check(ToolsGitHubConfigureParamsSchema, action)).toBe(false);
