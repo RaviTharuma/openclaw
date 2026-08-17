@@ -141,7 +141,7 @@ export async function resetCommand(runtime: RuntimeEnv, opts: ResetOptions) {
 
   const cleanupPlan = dryRun
     ? await resolveCleanupPlanForDryRun()
-    : resolveCleanupPlanForRemoval(runtime);
+    : await resolveCleanupPlanForRemoval(runtime);
   if (!cleanupPlan) {
     return;
   }

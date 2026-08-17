@@ -1,28 +1,21 @@
 // Resolves cleanup inputs from current OpenClaw config and state paths.
 import {
-  getRuntimeConfig,
+  readConfigFileSnapshot,
   readSourceConfigBestEffort,
   resolveConfigPath,
   resolveOAuthDir,
   resolveStateDir,
 } from "../config/config.js";
+import { formatConfigIssueSummary } from "../config/issue-format.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
-import { SqliteCoordinatorError } from "../infra/sqlite-coordinator.js";
 import type { RuntimeEnv } from "../runtime.js";
 import { buildCleanupPlan } from "./cleanup-utils.js";
 
-function hasSqliteCoordinatorCause(error: unknown, seen = new Set<unknown>()): boolean {
-  if (error instanceof SqliteCoordinatorError) {
-    return true;
-  }
-  if (!error || seen.has(error)) {
-    return false;
-  }
-  seen.add(error);
-  if (error instanceof AggregateError) {
-    return error.errors.some((cause) => hasSqliteCoordinatorCause(cause, seen));
-  }
-  return error instanceof Error && hasSqliteCoordinatorCause(error.cause, seen);
+function affectsWorkspaceDiscovery(path: string): boolean {
+  return (
+    path === "agents.defaults.workspace" ||
+    (path.startsWith("agents.entries.") && path.endsWith(".workspace"))
+  );
 }
 
 function buildCleanupPlanForConfig(cfg: OpenClawConfig) {
@@ -33,36 +26,25 @@ function buildCleanupPlanForConfig(cfg: OpenClawConfig) {
   return { cfg, stateDir, configPath, oauthDir, ...plan };
 }
 
-/** Build the cleanup plan for the current runtime config/state/credential paths on disk. */
-function resolveCleanupPlanFromDisk(): {
-  cfg: OpenClawConfig;
-  stateDir: string;
-  configPath: string;
-  oauthDir: string;
-  configInsideState: boolean;
-  oauthInsideState: boolean;
-  workspaceDirs: string[];
-} {
-  return buildCleanupPlanForConfig(getRuntimeConfig());
-}
-
 /** Build a read-only cleanup preview without recording config health state. */
 export async function resolveCleanupPlanForDryRun() {
   return buildCleanupPlanForConfig(await readSourceConfigBestEffort());
 }
 
-/** Resolve a destructive cleanup plan or report live state ownership consistently. */
-export function resolveCleanupPlanForRemoval(runtime: RuntimeEnv) {
-  try {
-    return resolveCleanupPlanFromDisk();
-  } catch (error) {
-    if (!hasSqliteCoordinatorCause(error)) {
-      throw error;
-    }
+/** Resolve destructive cleanup inputs without mutating the state being guarded. */
+export async function resolveCleanupPlanForRemoval(runtime: RuntimeEnv) {
+  const snapshot = await readConfigFileSnapshot({ observe: false, pluginValidation: "core-only" });
+  const workspaceWarnings = snapshot.warnings.filter((issue) =>
+    affectsWorkspaceDiscovery(issue.path),
+  );
+  if (!snapshot.valid || workspaceWarnings.length > 0) {
+    const issues = snapshot.valid ? workspaceWarnings : snapshot.issues;
+    const issueSummary = formatConfigIssueSummary(issues) ?? "configuration read failed";
     runtime.error(
-      "Cannot remove OpenClaw state while the Gateway or another state operation owns this state directory. Stop the Gateway and retry.",
+      `Cannot safely remove OpenClaw state because workspace configuration could not be resolved: ${issueSummary}. Fix the configuration and retry.`,
     );
     runtime.exit(1);
     return undefined;
   }
+  return buildCleanupPlanForConfig(snapshot.runtimeConfig);
 }

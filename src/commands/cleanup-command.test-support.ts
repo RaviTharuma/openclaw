@@ -63,7 +63,7 @@ export function resetCleanupCommandMocks() {
     workspaceDirs: ["/tmp/.openclaw/workspace"],
   };
   resolveCleanupPlanForDryRun.mockResolvedValue(cleanupPlan);
-  resolveCleanupPlanForRemoval.mockReturnValue(cleanupPlan);
+  resolveCleanupPlanForRemoval.mockResolvedValue(cleanupPlan);
   removePath.mockResolvedValue({ ok: true });
   listAgentSessionDirs.mockResolvedValue(["/tmp/.openclaw/agents/main/sessions"]);
   prepareLegacyWorkspaceStateReset.mockImplementation((workspaceDir: string) => ({ workspaceDir }));

@@ -201,7 +201,7 @@ export async function uninstallCommand(runtime: RuntimeEnv, opts: UninstallOptio
   const cleanupPlan = removesLocalData
     ? dryRun
       ? await resolveCleanupPlanForDryRun()
-      : resolveCleanupPlanForRemoval(runtime)
+      : await resolveCleanupPlanForRemoval(runtime)
     : undefined;
   if (removesLocalData && !cleanupPlan) {
     return;
