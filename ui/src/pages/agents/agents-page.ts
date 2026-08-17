@@ -53,6 +53,7 @@ import { GatewayPageController } from "../../lit/gateway-page-controller.ts";
 import { OpenClawLightDomElement } from "../../lit/openclaw-element.ts";
 import { SubscriptionsController } from "../../lit/subscriptions-controller.ts";
 import { loadAgentFileContent, saveAgentFile } from "./files.ts";
+import { GitHubIdentityController } from "./github-identity-controller.ts";
 import {
   resetIdentityDraft,
   saveIdentityDraft,
@@ -132,6 +133,7 @@ class AgentsPage
     agentId: string;
   } | null = null;
   private normalizedLocation = "";
+  private readonly githubIdentity = new GitHubIdentityController(this);
   private readonly gateway = new GatewayPageController(this, {
     getGateway: () => this.context?.gateway,
     onIdentityChange: () => this.resetForClientChange(),
@@ -519,10 +521,19 @@ class AgentsPage
       return;
     }
     if (this.agentsPanel === "tools") {
+      this.syncGitHubIdentity(agentId);
       if (this.toolsCatalogResult?.agentId !== agentId && !this.toolsCatalogLoading) {
         void loadToolsCatalog(this, agentId);
       }
       this.loadEffectiveToolsForAgent(agentId);
+      if (
+        this.githubIdentity.supported &&
+        !this.githubIdentity.status &&
+        !this.githubIdentity.loading &&
+        !this.githubIdentity.error
+      ) {
+        void this.githubIdentity.verify();
+      }
       return;
     }
     if (this.agentsPanel === "channels" && !this.context.channels.state.channelsSnapshot) {
@@ -541,6 +552,18 @@ class AgentsPage
         void this.refreshCron();
       }
     }
+  }
+
+  private syncGitHubIdentity(agentId: string | null) {
+    this.githubIdentity.sync({
+      client: this.client,
+      connected: this.connected,
+      agentId,
+      config: currentConfigObject(this.context.runtimeConfig.state),
+      supported: this.canCall("tools.github.status", "operator.read"),
+      configurable: this.canCall("tools.github.configure", "operator.admin"),
+      clientRevision: this.requestGeneration,
+    });
   }
 
   private ensureModelCatalog(options: { refresh?: boolean } = {}) {
@@ -892,6 +915,7 @@ class AgentsPage
       canWriteFiles: this.canCall("agents.files.set", "operator.admin"),
       canRunCron: this.canCall("cron.run", "operator.admin"),
     };
+    this.syncGitHubIdentity(selectedAgentId);
     return html`
       <section class="content-header">
         <div>
@@ -971,6 +995,7 @@ class AgentsPage
             error: this.toolsEffectiveError,
             result: this.toolsEffectiveResult,
           },
+          githubIdentity: this.githubIdentity,
           runtimeSessionKey: this.sessionKey,
           runtimeSessionMatchesSelectedAgent: selectedAgentId === this.chatAgentId(),
           modelCatalog: this.chatModelCatalog,

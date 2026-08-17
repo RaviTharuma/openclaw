@@ -111,6 +111,8 @@ const CURRENT_TRAIN_METHODS = [
   "sessions.move",
   "sessions.assignOwner",
   "controlUi.sessionPreview",
+  "tools.github.status",
+  "tools.github.configure",
 ] as const;
 
 describe("core gateway method release trains", () => {

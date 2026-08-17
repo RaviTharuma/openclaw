@@ -1,3 +1,4 @@
+import { GitHubIdentityController } from "./github-identity-controller.ts";
 import type { renderAgents } from "./view.ts";
 
 type AgentsViewProps = Parameters<typeof renderAgents>[0];
@@ -82,6 +83,7 @@ export function createAgentViewTestProps(
       error: null,
       result: null,
     },
+    githubIdentity: new GitHubIdentityController({ requestUpdate: () => undefined }),
     runtimeSessionKey: "main",
     runtimeSessionMatchesSelectedAgent: false,
     modelCatalog: [],

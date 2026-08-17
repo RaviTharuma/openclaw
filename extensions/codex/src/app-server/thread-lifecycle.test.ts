@@ -12,6 +12,7 @@ import type { CodexPluginThreadConfig } from "./plugin-thread-config.js";
 import {
   CODEX_OPENCLAW_DIRECT_DYNAMIC_TOOL_NAMESPACE,
   type CodexDynamicToolFunctionSpec,
+  type JsonObject,
 } from "./protocol.js";
 import {
   createCodexAppServerBindingStore,
@@ -89,6 +90,154 @@ describe("Codex context window config", () => {
       expect(request.config).not.toHaveProperty("model_context_window");
     }
   });
+});
+
+describe("Codex managed shell environment", () => {
+  it.each([
+    { action: "start" as const, inherit: "none" },
+    { action: "resume" as const, inherit: "core" },
+  ])(
+    "applies the host environment last for thread/$action with inherit=$inherit",
+    ({ action, inherit }) => {
+      const options = {
+        appServer: createAppServerOptions() as never,
+        config: {
+          allow_login_shell: true,
+          shell_environment_policy: {
+            inherit,
+            experimental_use_profile: true,
+            exclude: ["GIT_*"],
+            set: { GH_CONFIG_DIR: "/user-selected", KEEP_ME: "yes" },
+            include_only: ["PATH"],
+          },
+        },
+        shellEnvironment: {
+          GH_CONFIG_DIR: "/host-selected",
+          GH_TOKEN: "",
+          GITHUB_TOKEN: "",
+          PREVIEW_SERVICE_TOKEN: "",
+        },
+      };
+      const request =
+        action === "start"
+          ? buildThreadStartParams(createAttemptParams({ provider: "openai" }), {
+              ...options,
+              cwd: "/repo",
+              dynamicTools: [],
+            })
+          : buildThreadResumeParams(createAttemptParams({ provider: "openai" }), {
+              ...options,
+              threadId: "thread-1",
+            });
+
+      expect(request.config?.shell_environment_policy).toMatchObject({
+        inherit,
+        experimental_use_profile: false,
+        exclude: ["GIT_*"],
+        set: {
+          GH_CONFIG_DIR: "/host-selected",
+          KEEP_ME: "yes",
+          GH_TOKEN: "",
+          GITHUB_TOKEN: "",
+          PREVIEW_SERVICE_TOKEN: "",
+        },
+      });
+      expect(request.config?.allow_login_shell).toBe(false);
+      const includeOnly = (request.config?.shell_environment_policy as { include_only?: unknown[] })
+        .include_only;
+      expect(includeOnly).toHaveLength(5);
+      expect(includeOnly).toEqual(
+        expect.arrayContaining([
+          "PATH",
+          "GH_CONFIG_DIR",
+          "GITHUB_TOKEN",
+          "GH_TOKEN",
+          "PREVIEW_SERVICE_TOKEN",
+        ]),
+      );
+      const serializedPolicy = JSON.parse(JSON.stringify(request)).config
+        .shell_environment_policy as Record<string, unknown>;
+      expect(serializedPolicy.experimental_use_profile).toBe(false);
+      expect(serializedPolicy).not.toHaveProperty("use_profile");
+    },
+  );
+
+  it.each(["start", "resume"] as const)(
+    "disables login profiles unconditionally for thread/%s",
+    (action) => {
+      const build = (config: JsonObject, shellEnvironment?: Readonly<Record<string, string>>) => {
+        const options = {
+          appServer: createAppServerOptions() as never,
+          config,
+          shellEnvironment,
+        };
+        return action === "start"
+          ? buildThreadStartParams(createAttemptParams({ provider: "openai" }), {
+              ...options,
+              cwd: "/repo",
+              dynamicTools: [],
+            })
+          : buildThreadResumeParams(createAttemptParams({ provider: "openai" }), {
+              ...options,
+              threadId: "thread-1",
+            });
+      };
+
+      expect(build({ allow_login_shell: true }).config?.allow_login_shell).toBe(false);
+      expect(build({}).config?.allow_login_shell).toBe(false);
+      expect(build({}, { GH_TOKEN: "", GITHUB_TOKEN: "" }).config?.allow_login_shell).toBe(false);
+    },
+  );
+
+  it.each(["start", "resume"] as const)(
+    "admits host values through restrictive filters for thread/%s",
+    (action) => {
+      const options = {
+        appServer: createAppServerOptions() as never,
+        config: {
+          shell_environment_policy: {
+            experimental_use_profile: true,
+            filters: { PATH: "include", "GIT_*": "exclude" },
+            set: { KEEP_ME: "yes" },
+          },
+        },
+        shellEnvironment: {
+          GH_CONFIG_DIR: "/host-selected",
+          GH_TOKEN: "",
+          PREVIEW_SERVICE_TOKEN: "",
+        },
+      };
+      const request =
+        action === "start"
+          ? buildThreadStartParams(createAttemptParams({ provider: "openai" }), {
+              ...options,
+              cwd: "/repo",
+              dynamicTools: [],
+            })
+          : buildThreadResumeParams(createAttemptParams({ provider: "openai" }), {
+              ...options,
+              threadId: "thread-1",
+            });
+
+      expect(request.config?.shell_environment_policy).toMatchObject({
+        experimental_use_profile: false,
+        set: {
+          KEEP_ME: "yes",
+          GH_CONFIG_DIR: "/host-selected",
+          GH_TOKEN: "",
+          PREVIEW_SERVICE_TOKEN: "",
+        },
+        filters: {
+          PATH: "include",
+          "GIT_*": "exclude",
+          GH_CONFIG_DIR: "include",
+          GH_TOKEN: "include",
+          PREVIEW_SERVICE_TOKEN: "include",
+        },
+      });
+      expect(request.config?.shell_environment_policy).not.toHaveProperty("include_only");
+    },
+  );
 });
 
 describe("Codex ring-zero thread config", () => {
@@ -1241,6 +1390,7 @@ describe("Codex app-server native code mode config", () => {
     });
 
     expect(request.config).toEqual({
+      allow_login_shell: false,
       "features.hooks": true,
       apps: { _default: { enabled: false } },
       mcp_servers: {
@@ -1394,6 +1544,7 @@ describe("Codex app-server native code mode config", () => {
     );
 
     expect(request.config).toEqual({
+      allow_login_shell: false,
       "features.code_mode": true,
       "features.code_mode_only": false,
       "features.goals": false,
@@ -1522,6 +1673,7 @@ describe("Codex app-server native code mode config", () => {
     });
 
     expect(request.config).toEqual({
+      allow_login_shell: false,
       "features.code_mode": true,
       "features.code_mode_only": true,
       "features.goals": false,
@@ -1544,6 +1696,7 @@ describe("Codex app-server native code mode config", () => {
     });
 
     expect(request.config).toEqual({
+      allow_login_shell: false,
       "features.code_mode": true,
       "features.code_mode_only": true,
       "features.goals": false,
@@ -1602,6 +1755,7 @@ describe("Codex app-server native code mode config", () => {
     });
 
     expect(request.config).toEqual({
+      allow_login_shell: false,
       "features.code_mode": true,
       "features.code_mode_only": false,
       "features.goals": false,
@@ -1627,6 +1781,7 @@ describe("Codex app-server native code mode config", () => {
     });
 
     expect(request.config).toEqual({
+      allow_login_shell: false,
       "features.code_mode": false,
       "features.code_mode_only": false,
       "features.goals": false,
@@ -1647,6 +1802,7 @@ describe("Codex app-server native code mode config", () => {
     });
 
     expect(request.config).toEqual({
+      allow_login_shell: false,
       "features.code_mode": false,
       "features.code_mode_only": false,
       "features.goals": false,
@@ -1675,6 +1831,7 @@ describe("Codex app-server native code mode config", () => {
     );
 
     expect(request.config).toEqual({
+      allow_login_shell: false,
       project_doc_max_bytes: 0,
       "features.hooks": true,
       "features.code_mode": true,
@@ -1700,6 +1857,7 @@ describe("Codex app-server native code mode config", () => {
     );
 
     expect(request.config).toEqual({
+      allow_login_shell: false,
       project_doc_max_bytes: 64_000,
       "features.code_mode": true,
       "features.code_mode_only": false,
@@ -1903,6 +2061,7 @@ describe("Codex app-server turn params", () => {
       approvalPolicy: "on-request",
       approvalsReviewer: "guardian_subagent",
       config: {
+        allow_login_shell: false,
         "features.code_mode": true,
         "features.code_mode_only": false,
         "features.goals": false,
@@ -3061,6 +3220,7 @@ describe("Codex app-server supervised branch lifecycle", () => {
       cwd: workspaceDir,
       dynamicTools,
       environmentSelection: [{ environmentId: "local", cwd: workspaceDir }],
+      shellEnvironment: { GH_TOKEN: "", GITHUB_TOKEN: "" },
       appServer: createThreadLifecycleAppServerOptions(),
       appServerRuntimeFingerprint: "codex-runtime-v1",
     };
@@ -3083,6 +3243,13 @@ describe("Codex app-server supervised branch lifecycle", () => {
       threadId: sourceThreadId,
       lastTurnId,
       excludeTurns: true,
+      config: {
+        allow_login_shell: false,
+        shell_environment_policy: {
+          experimental_use_profile: false,
+          set: { GH_TOKEN: "", GITHUB_TOKEN: "" },
+        },
+      },
     });
     expect(forkParams).not.toHaveProperty("model");
     expect(forkParams).not.toHaveProperty("modelProvider");
@@ -3094,6 +3261,13 @@ describe("Codex app-server supervised branch lifecycle", () => {
       modelProvider: "native-provider",
       dynamicTools,
       environments: [{ environmentId: "local", cwd: workspaceDir }],
+      config: {
+        allow_login_shell: false,
+        shell_environment_policy: {
+          experimental_use_profile: false,
+          set: { GH_TOKEN: "", GITHUB_TOKEN: "" },
+        },
+      },
     });
     expect(startParams.model).not.toBe(attempt.modelId);
     expect(request.mock.calls[3]?.[1]).toEqual({

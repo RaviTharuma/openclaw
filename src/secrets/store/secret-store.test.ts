@@ -10,6 +10,7 @@ import {
   OPENCLAW_STATE_SCHEMA_VERSION,
 } from "../../state/openclaw-state-db.js";
 import {
+  consumeGitHubSetupHandoff,
   deleteSecretStoreEntry,
   listSecretStoreEntries,
   purgeExpiredSecretStoreEntries,
@@ -37,6 +38,36 @@ afterEach(() => {
 });
 
 describe("secret store", () => {
+  it("consumes only a fresh, unbound GitHub setup handoff", () => {
+    const database = createDatabaseOptions();
+    const name = "OPENCLAW_GITHUB_SETUP_11111111111111111111111111111111";
+    writeSecretStoreEntry({
+      scope: team,
+      name,
+      value: "temporary-value",
+      kind: "secret",
+      allowedHosts: [],
+      updatedBy: "test",
+      database,
+    });
+    writeSecretStoreEntry({
+      scope: team,
+      name: "DEPLOY_TOKEN",
+      value: "unrelated-value",
+      kind: "secret",
+      updatedBy: "test",
+      database,
+    });
+
+    expect(consumeGitHubSetupHandoff({ name, database })).toBe("temporary-value");
+    expect(consumeGitHubSetupHandoff({ name, database })).toBeUndefined();
+    expect(consumeGitHubSetupHandoff({ name: "DEPLOY_TOKEN", database })).toBeUndefined();
+    expect(readSecretStoreValue({ scope: team, name: "DEPLOY_TOKEN", database })).toEqual({
+      ok: true,
+      value: "unrelated-value",
+    });
+  });
+
   it("round-trips env and secret entries without disclosing secret list values", () => {
     const database = createDatabaseOptions();
     writeSecretStoreEntry({
@@ -106,6 +137,94 @@ describe("secret store", () => {
 
     vi.setSystemTime(new Date("2026-02-01T00:00:00.001Z"));
     expect(purgeExpiredSecretStoreEntries({ database })).toBe(1);
+    expect(listSecretStoreEntries({ scope: team, includeDeleted: true, database })).toEqual([]);
+  });
+
+  it.each([
+    { kind: "env" as const, allowedHosts: undefined, ageMs: 0 },
+    { kind: "secret" as const, allowedHosts: ["github.com"], ageMs: 0 },
+    { kind: "secret" as const, allowedHosts: undefined, ageMs: 10 * 60_000 + 1 },
+  ])("rejects a non-handoff store entry %#", ({ kind, allowedHosts, ageMs }) => {
+    const database = createDatabaseOptions();
+    const now = Date.now();
+    vi.useFakeTimers();
+    vi.setSystemTime(now - ageMs);
+    writeSecretStoreEntry({
+      scope: team,
+      name: "OPENCLAW_GITHUB_SETUP_22222222222222222222222222222222",
+      value: "temporary-value",
+      kind,
+      ...(allowedHosts ? { allowedHosts } : {}),
+      updatedBy: "test",
+      database,
+    });
+    expect(
+      consumeGitHubSetupHandoff({
+        name: "OPENCLAW_GITHUB_SETUP_22222222222222222222222222222222",
+        nowMs: now,
+        database,
+      }),
+    ).toBeUndefined();
+  });
+
+  it("keeps setup handoffs out of listings and exec and hard-deletes abandoned generations", () => {
+    const database = createDatabaseOptions();
+    const name = "OPENCLAW_GITHUB_SETUP_33333333333333333333333333333333";
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    writeSecretStoreEntry({
+      scope: team,
+      name,
+      value: "abandoned-value",
+      kind: "secret",
+      allowedHosts: [],
+      updatedBy: "test",
+      database,
+    });
+    writeSecretStoreEntry({
+      scope: team,
+      name: "UNRELATED_SECRET",
+      value: "keep-value",
+      kind: "secret",
+      updatedBy: "test",
+      database,
+    });
+
+    expect(listSecretStoreEntries({ scope: team, database }).map((entry) => entry.name)).toEqual([
+      "UNRELATED_SECRET",
+    ]);
+    expect(
+      listSecretStoreEntries({ scope: team, includeDeleted: true, database }).map(
+        (entry) => entry.name,
+      ),
+    ).toEqual(["UNRELATED_SECRET"]);
+    expect(
+      readSecretStoreExecEnvironment({ includeSecretSentinels: true, database }).secretSentinels,
+    ).not.toHaveProperty(name);
+    vi.setSystemTime(new Date("2026-01-01T00:10:00.001Z"));
+    expect(listSecretStoreEntries({ scope: team, database }).map((entry) => entry.name)).toEqual([
+      "UNRELATED_SECRET",
+    ]);
+    expect(purgeExpiredSecretStoreEntries({ database })).toBe(1);
+    expect(readSecretStoreValue({ scope: team, name, database }).ok).toBe(false);
+    expect(readSecretStoreValue({ scope: team, name: "UNRELATED_SECRET", database })).toEqual({
+      ok: true,
+      value: "keep-value",
+    });
+  });
+
+  it("hard-deletes reserved setup names while ordinary secrets remain soft-deleted", () => {
+    const database = createDatabaseOptions();
+    const name = "OPENCLAW_GITHUB_SETUP_44444444444444444444444444444444";
+    writeSecretStoreEntry({
+      scope: team,
+      name,
+      value: "temporary-value",
+      kind: "secret",
+      updatedBy: "test",
+      database,
+    });
+    deleteSecretStoreEntry({ scope: team, name, database });
     expect(listSecretStoreEntries({ scope: team, includeDeleted: true, database })).toEqual([]);
   });
 

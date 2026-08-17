@@ -109,6 +109,24 @@ export async function prepareCodexAttemptConnection({ params, options }: CodexRu
     agentId: sessionAgentId,
   });
   const agentDir = params.agentDir ?? resolveAgentDir(params.config ?? {}, sessionAgentId);
+  const preparedEnvironment = params.hostCapabilities.preparedEnvironment?.();
+  const remoteExec = isCodexRemoteExecPlacementSandbox(sandbox);
+  const shellEnvironment = preparedEnvironment
+    ? {
+        ...preparedEnvironment.credentialScrubEnv,
+        ...(!remoteExec ? preparedEnvironment.localIdentityEnv : undefined),
+      }
+    : undefined;
+  const withPreparedProcessEnv = <T extends { start: { env?: Record<string, string> } }>(
+    appServer: T,
+  ) => {
+    return shellEnvironment
+      ? {
+          ...appServer,
+          start: { ...appServer.start, env: { ...appServer.start.env, ...shellEnvironment } },
+        }
+      : appServer;
+  };
   let bindingIdentity: CodexAppServerBindingIdentity = sessionBindingIdentity({
     sessionId: params.sessionId,
     sessionKey: params.sessionKey,
@@ -316,7 +334,7 @@ export async function prepareCodexAttemptConnection({ params, options }: CodexRu
       env: process.env,
       agentDir,
     });
-    return { session, appServer: trusted };
+    return { session, appServer: withPreparedProcessEnv(trusted) };
   };
   let resolvedAppServer = resolveFinalAppServer(configuredAppServer, reviewerPolicyContext);
   let appServer = resolvedAppServer.appServer;
@@ -422,6 +440,7 @@ export async function prepareCodexAttemptConnection({ params, options }: CodexRu
     contextSessionKey,
     sandbox,
     agentDir,
+    shellEnvironment,
     bindingIdentity,
     bindingStore,
     activeContextEngine,

@@ -587,6 +587,8 @@ enum class GatewayMethod(
   PortalClose("portal.close"),
   SessionsMove("sessions.move"),
   SessionsAssignOwner("sessions.assignOwner"),
+  ToolsGithubStatus("tools.github.status"),
+  ToolsGithubConfigure("tools.github.configure"),
 }
 
 enum class GatewayEvent(

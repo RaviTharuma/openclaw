@@ -14540,6 +14540,54 @@ public struct ToolsCatalogParams: Codable, Sendable {
     }
 }
 
+public struct ToolsGitHubStatusParams: Codable, Sendable {
+    public let agentid: String
+
+    public init(
+        agentid: String)
+    {
+        self.agentid = agentid
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case agentid = "agentId"
+    }
+}
+
+public struct ToolsGitHubStatusResult: Codable, Sendable {
+    public let agentid: String
+    public let source: AnyCodable
+    public let credentialstate: AnyCodable
+    public let account: AnyCodable
+    public let gitauthor: [String: AnyCodable]
+    public let evidence: AnyCodable
+
+    public init(
+        agentid: String,
+        source: AnyCodable,
+        credentialstate: AnyCodable,
+        account: AnyCodable,
+        gitauthor: [String: AnyCodable],
+        evidence: AnyCodable)
+    {
+        self.agentid = agentid
+        self.source = source
+        self.credentialstate = credentialstate
+        self.account = account
+        self.gitauthor = gitauthor
+        self.evidence = evidence
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case agentid = "agentId"
+        case source
+        case credentialstate = "credentialState"
+        case account
+        case gitauthor = "gitAuthor"
+        case evidence
+    }
+}
+
 public struct ToolCatalogProfile: Codable, Sendable {
     public let id: AnyCodable
     public let label: String

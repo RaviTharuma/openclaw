@@ -542,6 +542,14 @@ const CORE_GATEWAY_METHOD_SPECS = [
     { startup: true, controlPlaneWrite: true },
   ],
   ["sessions.assignOwner", "sessions-mutations", "operator.write", "2026.8"],
+  ["tools.github.status", "tools-github", "operator.read", "2026.8"],
+  [
+    "tools.github.configure",
+    "tools-github",
+    "operator.admin",
+    "2026.8",
+    { controlPlaneWrite: true },
+  ],
 ] as const satisfies readonly CoreGatewayMethodSpecRow[];
 
 export type CoreGatewayHandlerFamily = Exclude<(typeof CORE_GATEWAY_METHOD_SPECS)[number][1], null>;

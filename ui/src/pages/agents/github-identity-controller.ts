@@ -1,0 +1,350 @@
+import type { GatewayBrowserClient } from "../../api/gateway.ts";
+import type { ToolsGitHubStatusResult } from "../../api/types.ts";
+import { t } from "../../i18n/index.ts";
+import { resolveAgentConfig } from "../../lib/agents/display.ts";
+import { formatUiError } from "../../lib/format-error.ts";
+import { generateUUID } from "../../lib/uuid.ts";
+
+export type GitHubIdentityScope = "system" | "agent";
+export type GitHubIdentityDraft = { token: string; name: string; email: string };
+
+type GitHubConfigValue = {
+  gitAuthor?: { name?: unknown; email?: unknown };
+};
+
+type RequestOwner = {
+  client: GatewayBrowserClient;
+  agentId: string;
+  clientRevision: number;
+  agentRevision: number;
+  requestRevision: number;
+};
+
+function configFingerprint(value: unknown): string {
+  return JSON.stringify(value ?? null);
+}
+
+function readDraft(value: unknown): GitHubIdentityDraft {
+  const github = value && typeof value === "object" ? (value as GitHubConfigValue) : undefined;
+  return {
+    token: "",
+    name: typeof github?.gitAuthor?.name === "string" ? github.gitAuthor.name : "",
+    email: typeof github?.gitAuthor?.email === "string" ? github.gitAuthor.email : "",
+  };
+}
+
+export class GitHubIdentityController {
+  status: ToolsGitHubStatusResult | null = null;
+  scope: GitHubIdentityScope = "system";
+  loading = false;
+  busy = false;
+  error: string | null = null;
+  supported = false;
+  configurable = false;
+  tokenRevealed = false;
+
+  private agentId: string | null = null;
+  private client: GatewayBrowserClient | null = null;
+  private connected = false;
+  private clientRevision = -1;
+  private agentRevision = -1;
+  private requestRevision = 0;
+  private effectiveFingerprint = "";
+  private identityInitialized = false;
+  private verificationQueued = false;
+  private drafts: Record<GitHubIdentityScope, GitHubIdentityDraft> = {
+    system: readDraft(undefined),
+    agent: readDraft(undefined),
+  };
+  private draftDirty: Record<GitHubIdentityScope, boolean> = { system: false, agent: false };
+  private configFingerprints: Record<GitHubIdentityScope, string> = { system: "", agent: "" };
+  constructor(private readonly host: { requestUpdate: () => void }) {}
+
+  private queueVerification() {
+    if (this.verificationQueued || !this.supported || !this.connected || !this.agentId) {
+      return;
+    }
+    this.verificationQueued = true;
+    queueMicrotask(() => {
+      this.verificationQueued = false;
+      void this.verify();
+    });
+  }
+
+  sync(params: {
+    client: GatewayBrowserClient | null;
+    connected: boolean;
+    agentId: string | null;
+    config: Record<string, unknown> | null;
+    supported: boolean;
+    configurable: boolean;
+    clientRevision: number;
+  }) {
+    const clientChanged =
+      this.client !== params.client ||
+      this.connected !== params.connected ||
+      this.clientRevision !== params.clientRevision;
+    const agentChanged = this.agentId !== params.agentId;
+    const capabilityChanged =
+      this.supported !== params.supported || this.configurable !== params.configurable;
+    if (clientChanged || agentChanged || capabilityChanged) {
+      this.requestRevision += 1;
+    }
+    this.client = params.client;
+    this.connected = params.connected;
+    this.clientRevision = params.clientRevision;
+    this.supported = params.supported;
+    this.configurable = params.configurable;
+    this.agentId = params.agentId;
+    if (agentChanged) {
+      this.agentRevision += 1;
+    }
+    const resolved = params.agentId ? resolveAgentConfig(params.config, params.agentId) : null;
+    const values = {
+      system: resolved?.globalTools?.github,
+      agent: resolved?.entry?.tools?.github,
+    };
+    const effectiveFingerprint = configFingerprint(values.agent ?? values.system);
+    const identityChanged =
+      this.identityInitialized && this.effectiveFingerprint !== effectiveFingerprint;
+    this.effectiveFingerprint = effectiveFingerprint;
+    this.identityInitialized = true;
+    if (identityChanged) {
+      this.requestRevision += 1;
+    }
+    if (clientChanged || agentChanged) {
+      this.status = null;
+      this.error = null;
+      this.loading = false;
+      this.busy = false;
+      this.tokenRevealed = false;
+      this.drafts = { system: readDraft(values.system), agent: readDraft(values.agent) };
+      this.draftDirty = { system: false, agent: false };
+      this.configFingerprints = {
+        system: configFingerprint(values.system),
+        agent: configFingerprint(values.agent),
+      };
+      this.scope = values.agent ? "agent" : "system";
+      return;
+    }
+    if (capabilityChanged) {
+      this.loading = false;
+      this.busy = false;
+    }
+    for (const scope of ["system", "agent"] as const) {
+      const fingerprint = configFingerprint(values[scope]);
+      if (!this.draftDirty[scope] && this.configFingerprints[scope] !== fingerprint) {
+        this.drafts = { ...this.drafts, [scope]: readDraft(values[scope]) };
+        this.configFingerprints = { ...this.configFingerprints, [scope]: fingerprint };
+      }
+    }
+    if (identityChanged) {
+      this.status = null;
+      this.error = null;
+      this.loading = false;
+      this.queueVerification();
+    }
+  }
+
+  get draft(): GitHubIdentityDraft {
+    return this.drafts[this.scope];
+  }
+
+  selectScope(scope: GitHubIdentityScope) {
+    this.scope = scope;
+    this.tokenRevealed = false;
+    this.host.requestUpdate();
+  }
+
+  toggleTokenVisibility() {
+    this.tokenRevealed = !this.tokenRevealed;
+    this.host.requestUpdate();
+  }
+
+  setDraft(field: keyof GitHubIdentityDraft, value: string) {
+    this.drafts = {
+      ...this.drafts,
+      [this.scope]: { ...this.drafts[this.scope], [field]: value },
+    };
+    this.draftDirty = { ...this.draftDirty, [this.scope]: true };
+    this.host.requestUpdate();
+  }
+
+  private captureRequest(): RequestOwner | null {
+    if (!this.client || !this.connected || !this.agentId) {
+      return null;
+    }
+    return {
+      client: this.client,
+      agentId: this.agentId,
+      clientRevision: this.clientRevision,
+      agentRevision: this.agentRevision,
+      requestRevision: ++this.requestRevision,
+    };
+  }
+
+  private isCurrent(owner: RequestOwner): boolean {
+    return (
+      this.client === owner.client &&
+      this.connected &&
+      this.agentId === owner.agentId &&
+      this.clientRevision === owner.clientRevision &&
+      this.agentRevision === owner.agentRevision &&
+      this.requestRevision === owner.requestRevision
+    );
+  }
+
+  private async deleteSetupHandoff(client: GatewayBrowserClient, secretName: string) {
+    await client.request("secrets.store.delete", { name: secretName }).catch(() => undefined);
+  }
+
+  async verify() {
+    if (!this.supported || this.loading || this.busy) {
+      return;
+    }
+    const owner = this.captureRequest();
+    if (!owner) {
+      return;
+    }
+    this.loading = true;
+    this.error = null;
+    this.host.requestUpdate();
+    try {
+      const status = await owner.client.request<ToolsGitHubStatusResult>("tools.github.status", {
+        agentId: owner.agentId,
+      });
+      if (this.isCurrent(owner)) {
+        if (status.agentId !== owner.agentId) {
+          throw new Error("Gateway returned GitHub identity status for a different agent.");
+        }
+        this.status = status;
+      }
+    } catch (error) {
+      if (this.isCurrent(owner)) {
+        this.error = formatUiError(error);
+      }
+    } finally {
+      if (this.isCurrent(owner)) {
+        this.loading = false;
+        this.host.requestUpdate();
+      }
+    }
+  }
+
+  async configure() {
+    const scope = this.scope;
+    const draft = { ...this.draft };
+    if (!this.client || !this.connected || !this.agentId || !this.configurable || this.busy) {
+      return;
+    }
+    if (!draft.token.trim()) {
+      this.error = t("agentTools.githubPasteToken");
+      this.host.requestUpdate();
+      return;
+    }
+    const name = draft.name.trim();
+    const email = draft.email.trim();
+    const owner = this.captureRequest();
+    if (!owner) {
+      return;
+    }
+    this.loading = false;
+    this.busy = true;
+    this.error = null;
+    this.host.requestUpdate();
+    let stored = false;
+    let secretName = "";
+    try {
+      secretName = `OPENCLAW_GITHUB_SETUP_${generateUUID().replaceAll("-", "").toUpperCase()}`;
+      await owner.client.request("secrets.store.set", {
+        name: secretName,
+        value: draft.token,
+        kind: "secret",
+        allowedHosts: [],
+      });
+      stored = true;
+      if (!this.isCurrent(owner)) {
+        await this.deleteSetupHandoff(owner.client, secretName);
+        return;
+      }
+      const status = await owner.client.request<ToolsGitHubStatusResult>("tools.github.configure", {
+        scope,
+        agentId: owner.agentId,
+        mode: "managed",
+        secretName,
+        ...(name || email
+          ? {
+              gitAuthor: {
+                ...(name ? { name } : {}),
+                ...(email ? { email } : {}),
+              },
+            }
+          : {}),
+      });
+      if (this.isCurrent(owner)) {
+        if (status.agentId !== owner.agentId) {
+          throw new Error("Gateway returned GitHub identity status for a different agent.");
+        }
+        this.status = status;
+        this.drafts = { ...this.drafts, [scope]: { ...draft, token: "" } };
+        this.draftDirty = { ...this.draftDirty, [scope]: false };
+        this.tokenRevealed = false;
+      }
+    } catch (error) {
+      if (stored) {
+        await this.deleteSetupHandoff(owner.client, secretName);
+      }
+      if (this.isCurrent(owner)) {
+        this.error = formatUiError(error);
+      }
+    } finally {
+      if (this.isCurrent(owner)) {
+        this.busy = false;
+        this.host.requestUpdate();
+      }
+    }
+  }
+
+  async inherit() {
+    const scope = this.scope;
+    if (!this.configurable || this.busy) {
+      return;
+    }
+    const owner = this.captureRequest();
+    if (!owner) {
+      return;
+    }
+    this.loading = false;
+    this.busy = true;
+    this.error = null;
+    this.host.requestUpdate();
+    try {
+      const status = await owner.client.request<ToolsGitHubStatusResult>("tools.github.configure", {
+        scope,
+        agentId: owner.agentId,
+        mode: "inherit",
+      });
+      if (this.isCurrent(owner)) {
+        if (status.agentId !== owner.agentId) {
+          throw new Error("Gateway returned GitHub identity status for a different agent.");
+        }
+        this.status = status;
+        this.drafts = { ...this.drafts, [scope]: readDraft(undefined) };
+        this.draftDirty = { ...this.draftDirty, [scope]: false };
+        this.tokenRevealed = false;
+        if (scope === "agent") {
+          this.scope = "system";
+        }
+      }
+    } catch (error) {
+      if (this.isCurrent(owner)) {
+        this.error = formatUiError(error);
+      }
+    } finally {
+      if (this.isCurrent(owner)) {
+        this.busy = false;
+        this.host.requestUpdate();
+      }
+    }
+  }
+}
