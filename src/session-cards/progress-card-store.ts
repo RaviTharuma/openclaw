@@ -28,7 +28,7 @@ function withProgressCardDatabase<T>(
   const db = openNodeSqliteDatabase(input, { readOnly });
   try {
     if (!readOnly) {
-      db.exec("PRAGMA foreign_keys = ON;");
+      db.exec("PRAGMA foreign_keys = ON;"); // sqlite-allow-raw -- Connection bootstrap before Kysely queries.
     }
     return operation(db, input);
   } finally {

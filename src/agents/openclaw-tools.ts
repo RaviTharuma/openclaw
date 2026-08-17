@@ -457,10 +457,14 @@ export function createOpenClawTools(
     callGateway: effectiveCallGateway,
     sessionLinkBase,
   };
-  const includeProgressCardTool = shouldIncludeProgressCardToolForOpenClawTools({
+  const progressCardTool = shouldIncludeProgressCardToolForOpenClawTools({
     config: resolvedConfig,
     pluginToolDenylist: options?.pluginToolDenylist,
-  });
+  })
+    ? createProgressCardTool({
+        agentSessionKey: options?.runSessionKey ?? options?.agentSessionKey,
+      })
+    : null;
   const includeAskUserTool = shouldIncludeAskUserToolForOpenClawTools({
     config: resolvedConfig,
     agentSessionKey: options?.runSessionKey ?? options?.agentSessionKey,
@@ -598,13 +602,7 @@ export function createOpenClawTools(
             run: options?.skillWorkshop,
           }),
         ]),
-    ...(includeProgressCardTool
-      ? [
-          createProgressCardTool({
-            agentSessionKey: options?.runSessionKey ?? options?.agentSessionKey,
-          }),
-        ]
-      : []),
+    ...collectPresentOpenClawTools([progressCardTool]),
     ...swarmToolGroups.structuredOutput,
     ...(includeAskUserTool
       ? [
@@ -722,10 +720,7 @@ export function createOpenClawTools(
   options?.recordToolPrepStage?.("openclaw-tools:core-tool-list");
   let allTools = tools;
   if (!options?.disablePluginTools) {
-    const existingToolNames = new Set<string>();
-    for (const tool of tools) {
-      existingToolNames.add(tool.name);
-    }
+    const existingToolNames = new Set(tools.map((tool) => tool.name));
     allTools = [
       ...tools,
       ...resolveOpenClawPluginToolsForOptions({

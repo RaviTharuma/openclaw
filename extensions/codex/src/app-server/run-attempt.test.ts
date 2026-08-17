@@ -2319,17 +2319,18 @@ describe("runCodexAppServerAttempt", () => {
       content: [{ type: "text" as const, text: "Progress card updated" }],
       details: {},
     }));
-    testing.setOpenClawCodingToolsFactoryForTests((options) =>
-      createOpenClawCodingTools(options)
-        .filter((tool) =>
-          ["read", "write", "edit", "apply_patch", "exec", "process", "progress_card"].includes(
-            tool.name,
-          ),
-        )
-        .map((tool) =>
-          tool.name === "progress_card" ? { ...tool, execute: executeProgressCard } : tool,
+    testing.setOpenClawCodingToolsFactoryForTests((options) => {
+      const tools = createOpenClawCodingTools(options).filter((tool) =>
+        ["read", "write", "edit", "apply_patch", "exec", "process", "progress_card"].includes(
+          tool.name,
         ),
-    );
+      );
+      const progressCardTool = tools.find((tool) => tool.name === "progress_card");
+      if (progressCardTool) {
+        progressCardTool.execute = executeProgressCard;
+      }
+      return tools;
+    });
     const params = createRunParams();
     params.disableTools = false;
     setCodexTestModelSupportsTools(params, true);

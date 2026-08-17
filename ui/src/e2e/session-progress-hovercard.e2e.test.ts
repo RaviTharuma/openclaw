@@ -1,5 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
+import { isRecord } from "@openclaw/normalization-core/record-coerce";
 import type { Page } from "playwright";
 import { expect, it } from "vitest";
 import {
@@ -169,7 +170,7 @@ suite.define(() => {
           .poll(
             async () =>
               (await gateway.getRequests("progressCard.get")).filter(
-                (request) => request.params.sessionKey === sessionKey,
+                (request) => isRecord(request.params) && request.params.sessionKey === sessionKey,
               ).length,
           )
           .toBe(2);

@@ -101,7 +101,8 @@ function createStore(gateway: ApplicationGateway): SessionProgressCardStore {
     }
   };
 
-  const watchedKeys = () => new Set([...watchedByOwner.values()].flatMap((keys) => [...keys]));
+  const watchedKeys = () =>
+    new Set(Array.from(watchedByOwner.values()).flatMap((keys) => Array.from(keys)));
 
   const remember = (sessionKey: string, cached: CachedProgressCard) => {
     cache.delete(sessionKey);
@@ -141,8 +142,7 @@ function createStore(gateway: ApplicationGateway): SessionProgressCardStore {
     }
     const generation = loadGenerations.get(sessionKey) ?? 0;
     const clientAtRequest = client;
-    let request: Promise<ProgressCard | null>;
-    request = client
+    const request = client
       .request<ProgressCardGetResult>(PROGRESS_CARD_GET_METHOD, { sessionKey })
       .then((response) => {
         const card = parseProgressCard(response, sessionKey);
@@ -217,7 +217,9 @@ function createStore(gateway: ApplicationGateway): SessionProgressCardStore {
     if (watchedKeys().has(sessionKey)) {
       const active = loads.get(sessionKey);
       if (active) {
-        void active.finally(() => load(sessionKey)).catch(() => undefined);
+        void active
+          .finally(() => void load(sessionKey).catch(() => undefined))
+          .catch(() => undefined);
       } else {
         void load(sessionKey).catch(() => undefined);
       }
