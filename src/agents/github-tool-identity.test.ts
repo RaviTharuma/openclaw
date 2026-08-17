@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useAutoCleanupTempDirTracker } from "../../test/helpers/temp-dir.js";
 
 const processMocks = vi.hoisted(() => ({ runCommandBuffered: vi.fn() }));
 
@@ -15,6 +15,8 @@ import {
   resolveManagedGitHubProfileDir,
 } from "./github-tool-identity.js";
 
+const tempDirs = useAutoCleanupTempDirTracker(afterEach);
+
 function commandResult(stdout = "", code = 0, stderr = "") {
   return {
     stdout: Buffer.from(stdout),
@@ -27,20 +29,13 @@ function commandResult(stdout = "", code = 0, stderr = "") {
 }
 
 describe("GitHub tool identity", () => {
-  const roots: string[] = [];
-
   beforeEach(() => {
     processMocks.runCommandBuffered.mockReset();
     processMocks.runCommandBuffered.mockResolvedValue(commandResult());
   });
 
-  afterEach(async () => {
-    await Promise.all(roots.splice(0).map((root) => fs.rm(root, { recursive: true, force: true })));
-  });
-
   it("clears native service tokens and gives an agent override complete precedence", async () => {
-    const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-github-state-"));
-    roots.push(stateDir);
+    const stateDir = tempDirs.make("openclaw-github-state-");
     const config = {
       tools: {
         github: {
@@ -231,8 +226,7 @@ describe("GitHub tool identity", () => {
   });
 
   it("probes native gh without ambient tokens and reads Git author in the selected workspace", async () => {
-    const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-github-workspace-"));
-    roots.push(workspace);
+    const workspace = tempDirs.make("openclaw-github-workspace-");
     processMocks.runCommandBuffered.mockImplementation(async (argv: string[]) =>
       argv[0] === "gh"
         ? commandResult('{"login":"native-user","avatarUrl":null}\n')
@@ -262,8 +256,7 @@ describe("GitHub tool identity", () => {
       credentialState: "unverified",
     },
   ])("reports a managed $label honestly", async (testCase) => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-github-status-"));
-    roots.push(root);
+    const root = tempDirs.make("openclaw-github-status-");
     const profileId = "ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     const env = { OPENCLAW_STATE_DIR: root };
     const profileDir = resolveManagedGitHubProfileDir({
@@ -298,8 +291,7 @@ describe("GitHub tool identity", () => {
   });
 
   it("uses stdin to build a private verified profile and returns only account metadata", async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-github-profile-"));
-    roots.push(root);
+    const root = tempDirs.make("openclaw-github-profile-");
     const profileDir = path.join(root, "profile");
     const calls: Array<{ argv: string[]; input?: string }> = [];
     processMocks.runCommandBuffered.mockImplementation(
@@ -335,8 +327,7 @@ describe("GitHub tool identity", () => {
   });
 
   it("keeps the previous generation after the new version commits", async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-github-rotate-"));
-    roots.push(root);
+    const root = tempDirs.make("openclaw-github-rotate-");
     const previousProfileDir = path.join(root, "profile-old");
     const profileDir = path.join(root, "profile-new");
     await fs.mkdir(previousProfileDir, { mode: 0o700 });
@@ -381,8 +372,7 @@ describe("GitHub tool identity", () => {
   });
 
   it("deletes only the new profile when the guarded config write fails", async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-github-rollback-"));
-    roots.push(root);
+    const root = tempDirs.make("openclaw-github-rollback-");
     const previousProfileDir = path.join(root, "profile-old");
     const profileDir = path.join(root, "profile-new");
     await fs.mkdir(previousProfileDir, { mode: 0o700 });

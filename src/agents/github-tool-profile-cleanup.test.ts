@@ -1,18 +1,14 @@
 import fs from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { useAutoCleanupTempDirTracker } from "../../test/helpers/temp-dir.js";
 import {
   resolveManagedGitHubAgentKey,
   resolveManagedGitHubProfileRoot,
 } from "./github-tool-identity.js";
 import { cleanupRetiredManagedGitHubProfiles } from "./github-tool-profile-cleanup.js";
 
-const roots: string[] = [];
-
-afterEach(async () => {
-  await Promise.all(roots.splice(0).map((root) => fs.rm(root, { recursive: true, force: true })));
-});
+const tempDirs = useAutoCleanupTempDirTracker(afterEach);
 
 async function createProfile(root: string, profileId: string) {
   const profile = path.join(root, profileId);
@@ -23,10 +19,7 @@ async function createProfile(root: string, profileId: string) {
 
 describe("managed GitHub profile startup cleanup", () => {
   it("removes only unreferenced generations inside exact system and agent roots", async () => {
-    const stateDir = await fs.realpath(
-      await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-github-cleanup-")),
-    );
-    roots.push(stateDir);
+    const stateDir = await fs.realpath(tempDirs.make("openclaw-github-cleanup-"));
     const env = { OPENCLAW_STATE_DIR: stateDir };
     const agentDir = path.join(stateDir, "mutable-agent-dir");
     const systemRoot = resolveManagedGitHubProfileRoot({
@@ -84,10 +77,7 @@ describe("managed GitHub profile startup cleanup", () => {
   });
 
   it("removes the complete safe profile root for an agent no longer configured", async () => {
-    const stateDir = await fs.realpath(
-      await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-github-cleanup-removed-agent-")),
-    );
-    roots.push(stateDir);
+    const stateDir = await fs.realpath(tempDirs.make("openclaw-github-cleanup-removed-agent-"));
     const env = { OPENCLAW_STATE_DIR: stateDir };
     const removedRoot = resolveManagedGitHubProfileRoot({
       agentId: "removed-agent",
@@ -109,13 +99,8 @@ describe("managed GitHub profile startup cleanup", () => {
   });
 
   it("refuses symlink generations without touching their targets", async () => {
-    const stateDir = await fs.realpath(
-      await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-github-cleanup-link-")),
-    );
-    const outside = await fs.realpath(
-      await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-github-cleanup-outside-")),
-    );
-    roots.push(stateDir, outside);
+    const stateDir = await fs.realpath(tempDirs.make("openclaw-github-cleanup-link-"));
+    const outside = await fs.realpath(tempDirs.make("openclaw-github-cleanup-outside-"));
     const systemRoot = path.join(stateDir, "credentials", "github", "system");
     const agentRegistry = path.join(stateDir, "credentials", "github", "agents");
     await fs.mkdir(systemRoot, { recursive: true });

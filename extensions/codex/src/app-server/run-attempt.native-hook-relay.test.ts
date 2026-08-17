@@ -280,7 +280,7 @@ describe("runCodexAppServerAttempt native hook relay", () => {
     expect(nativeHookRelayTesting.getNativeHookRelayRegistrationForTests(relayId)).toBeUndefined();
   });
 
-  it("auto-answers defensive yolo command and workspace file approvals when the hook allows", async () => {
+  it("auto-answers defensive yolo command and workspace file approvals at their safe scopes", async () => {
     const approvalSpy = vi.spyOn(approvalBridge, "handleCodexAppServerApprovalRequest");
     const beforeToolCall = vi.fn(() => undefined);
     initializeGlobalHookRunner(
@@ -320,7 +320,8 @@ describe("runCodexAppServerAttempt native hook relay", () => {
       },
     });
     expect(approvalSpy).toHaveBeenCalledWith(expect.objectContaining({ autoApprove: true }));
-    expect(commandResponse).toEqual({ decision: "acceptForSession" });
+    // Executable-backed commands are byte-bound and cannot receive reusable approval.
+    expect(commandResponse).toEqual({ decision: "accept" });
     await expect(
       harness.handleServerRequest({
         id: "request-file-policy-allow",
