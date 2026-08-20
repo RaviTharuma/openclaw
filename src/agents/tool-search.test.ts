@@ -1042,11 +1042,11 @@ describe("Tool Search", () => {
     },
     {
       mode: "tools" as const,
-      expectedGuidance: "Call read, write, edit, and exec directly",
+      expectedGuidance: "Call read, write, edit, apply_patch, exec, and process directly",
     },
     {
       mode: "directory" as const,
-      expectedGuidance: "Call read, write, edit, and exec directly",
+      expectedGuidance: "Call read, write, edit, apply_patch, exec, and process directly",
     },
   ])("builds a bounded capability directory for $mode mode", ({ mode, expectedGuidance }) => {
     const catalogRef = createToolSearchCatalogRef();
@@ -1076,6 +1076,8 @@ describe("Tool Search", () => {
     expect(directory).toContain("- fake_weather (fake-catalog): Read current weather");
     expect(directory.indexOf("- fake_calendar")).toBeLessThan(directory.indexOf("- fake_weather"));
     expect(directory).toContain(expectedGuidance);
+    expect(directory).toContain("apply_patch");
+    expect(directory).toContain("process");
     expect(directory).toContain("Policy-approved MCP and client tools");
     expect(directory).not.toContain("Control a desktop");
     expect(directory).not.toContain('"properties"');
