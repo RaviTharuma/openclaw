@@ -197,6 +197,17 @@ function shouldCatalogTool(tool: AnyAgentTool): boolean {
  * resolve to trusted OpenClaw tools: an MCP lookalike must never become a
  * direct delivery or core-coding tool.
  */
+export function collectDirectCoreCodingToolNames(
+  tools: readonly { name: string }[],
+): string[] {
+  const present = new Set(
+    tools.map((tool) => tool.name).filter((name) => isCoreCodingSurfaceToolName(name)),
+  );
+  return ["read", "write", "edit", "apply_patch", "exec", "process"].filter((name) =>
+    present.has(name),
+  );
+}
+
 export function isDirectVisibleCatalogTool(
   tool: AnyAgentTool,
   directToolNames: ReadonlySet<string>,
@@ -260,6 +271,7 @@ function registerToolSearchCatalog(params: {
     searchCount: prior?.searchCount ?? 0,
     describeCount: prior?.describeCount ?? 0,
     callCount: prior?.callCount ?? 0,
+    directCoreToolNames: prior?.directCoreToolNames ?? [],
   };
   // The supplied fingerprint describes the input entries. Duplicate IDs are
   // last-write-wins, so recompute when registration changed the entry set.
@@ -441,9 +453,11 @@ export function applyToolCatalogCompaction(
     }
     visible.push(tool);
   }
+  const directCoreToolNames = collectDirectCoreCodingToolNames(visible);
   const existingCatalog = catalogRef.current;
   const incomingFingerprint = existingCatalog ? catalogEntriesFingerprint(catalog) : undefined;
   if (existingCatalog && catalogFingerprints.get(existingCatalog) === incomingFingerprint) {
+    existingCatalog.directCoreToolNames = directCoreToolNames;
     const reboundEntries = rebindCatalogExecutors(existingCatalog.entries, catalog);
     if (reboundEntries) {
       if (
@@ -466,6 +480,9 @@ export function applyToolCatalogCompaction(
     entries: catalog,
     fingerprint: incomingFingerprint,
   });
+  if (catalogRef.current) {
+    catalogRef.current.directCoreToolNames = directCoreToolNames;
+  }
   return {
     tools: visible,
     compacted: catalog.length > 0,

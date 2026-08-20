@@ -118,6 +118,8 @@ export type ToolSearchCatalogSession = {
   searchCount: number;
   describeCount: number;
   callCount: number;
+  /** Trusted core coding tools still model-visible after compaction. */
+  directCoreToolNames: string[];
 };
 
 export type ToolSearchCatalogTelemetry = Omit<ToolSearchCatalogSession, "entries"> & {
