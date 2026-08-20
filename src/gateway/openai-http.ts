@@ -954,6 +954,7 @@ export async function handleOpenAiHttpRequest(
       sessionPrefix: "openai",
       defaultMessageChannel: "webchat",
       useMessageChannelHeader: true,
+      bindUserToSession: false,
     }));
   } catch (err) {
     if (
