@@ -495,15 +495,14 @@ describe("createCopilotToolBridge", () => {
         toolSearchCatalogExecutor: expect.any(Function),
       }),
     );
-    expect(result.sourceTools.map((tool) => tool.name)).toEqual(["tool_search_code", "read"]);
+    expect(result.sourceTools.map((tool) => tool.name)).toEqual(["tool_search_code"]);
     expect(result.promptToolPolicy.apply().tools.map((tool) => tool.name)).toEqual([
       "tool_search_code",
-      "read",
     ]);
     expect(result.promptToolPolicy.apply().callableToolNames).toEqual([
       "tool_search_code",
-      "read",
       "fake_hidden",
+      "read",
     ]);
     expect(result.promptToolPolicy.apply({ toolsAllow: ["fake_hidden"] })).toMatchObject({
       callableToolNames: ["tool_search_code", "fake_hidden"],
@@ -531,11 +530,11 @@ describe("createCopilotToolBridge", () => {
       createOpenClawCodingTools,
     });
 
-    expect(result.sourceTools.map((tool) => tool.name)).toEqual(["tool_search_code", "read"]);
+    expect(result.sourceTools.map((tool) => tool.name)).toEqual(["tool_search_code"]);
     expect(result.promptToolPolicy.apply().tools.map((tool) => tool.name)).toEqual([
       "tool_search_code",
-      "read",
     ]);
+    expect(result.promptToolPolicy.apply().callableToolNames).toEqual(["tool_search_code", "read"]);
   });
 
   it("filters the hidden tool_search catalog before compacting narrowed tools", async () => {
@@ -572,7 +571,10 @@ describe("createCopilotToolBridge", () => {
       createOpenClawCodingTools,
     });
 
-    expect(catalogRef?.current?.entries?.map((entry) => entry.name)).toEqual(["plugin_keep"]);
+    expect(catalogRef?.current?.entries?.map((entry) => entry.name)).toEqual([
+      "read",
+      "plugin_keep",
+    ]);
   });
 
   it("compacts the Copilot tool surface behind code-mode exec/wait when enabled", async () => {
