@@ -52,7 +52,7 @@ import {
   createAgentAttemptLifecycleCallbacks,
   type AgentAttemptLifecycleState,
 } from "./attempt-callbacks.js";
-import { persistAgentSession } from "./attempt-execution.shared.js";
+import { persistAgentSession, withCandidatePromptMode } from "./attempt-execution.shared.js";
 import { createCommandCompactionAccounting } from "./compaction-accounting.js";
 import { createAgentCommandLifecycle } from "./lifecycle.js";
 import { normalizeAgentCommandModelRef } from "./model-ref.js";
@@ -511,7 +511,13 @@ export async function runEmbeddedAgentAttempt(params: {
               runTimeoutOverrideMs,
               runId,
               lifecycleGeneration,
-              opts: logicalTurnOpts,
+              opts: withCandidatePromptMode(logicalTurnOpts, {
+                cfg,
+                agentId: sessionAgentId,
+                sessionKey,
+                modelProvider: providerOverride,
+                modelId: modelOverride,
+              }),
               runContext,
               spawnedBy,
               messageChannel,
