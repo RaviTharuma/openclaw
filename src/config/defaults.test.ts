@@ -485,6 +485,7 @@ describe("applyModelDefaults catalog seeding", () => {
                   name: "Reasoning Model",
                   reasoning: true,
                   contextWindow: 131_072,
+                  // SAFETY: custom openai-completions reasoning row that omits maxTokens.
                 } as never,
               ],
             },
@@ -517,6 +518,7 @@ describe("applyModelDefaults catalog seeding", () => {
                   reasoning: true,
                   contextWindow: 131_072,
                   maxTokens: 8_192,
+                  // SAFETY: custom reasoning row that authors an explicit 8192 cap.
                 } as never,
               ],
             },
@@ -547,6 +549,7 @@ describe("applyModelDefaults catalog seeding", () => {
                   name: "Reasoning Model",
                   reasoning: true,
                   contextWindow: 200_000,
+                  // SAFETY: custom anthropic-messages reasoning row that omits maxTokens.
                 } as never,
               ],
             },
