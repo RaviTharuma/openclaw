@@ -177,8 +177,9 @@ export type ModelDefinitionConfig = {
   contextTokens?: number;
   /**
    * Maximum completion/output token budget.
-   * Omitted when an openai-completions reasoning row has no authored, catalog,
-   * or provider cap so the provider applies its own limit.
+   * Omitted when an explicit non-native openai-completions proxy reasoning row
+   * has no authored, catalog, or provider cap so the provider applies its own
+   * limit. Native Completions still default to 8192.
    */
   maxTokens?: number;
   /** Maps OpenClaw thinking levels to provider/model-specific values. */

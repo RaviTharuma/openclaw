@@ -59,6 +59,7 @@ const DEFAULT_MODEL_COST: ModelDefinitionConfig["cost"] = {
 };
 const DEFAULT_MODEL_INPUT: ModelDefinitionConfig["input"] = ["text"];
 const DEFAULT_MODEL_MAX_TOKENS = 8192;
+const NATIVE_OPENAI_COMPLETIONS_HOST = "api.openai.com";
 const MISTRAL_SAFE_MAX_TOKENS_BY_MODEL = {
   "devstral-medium-latest": 32_768,
   "magistral-small": 40_000,
@@ -70,6 +71,27 @@ const MISTRAL_SAFE_MAX_TOKENS_BY_MODEL = {
 
 type ModelDefinitionLike = Partial<ModelDefinitionConfig> &
   Pick<ModelDefinitionConfig, "id" | "name">;
+
+function isExplicitOpenAICompletionsProxyRoute(params: {
+  api?: string;
+  baseUrl?: string;
+}): boolean {
+  // Documented proxy-route shaping: openai-completions on a non-native, non-empty
+  // baseUrl. Empty/omitted URLs and api.openai.com keep the established 8192 default.
+  if (params.api !== "openai-completions") {
+    return false;
+  }
+  const baseUrl = params.baseUrl?.trim();
+  if (!baseUrl) {
+    return false;
+  }
+  try {
+    const host = new URL(baseUrl).hostname.toLowerCase().replace(/\.+$/, "");
+    return host !== NATIVE_OPENAI_COMPLETIONS_HOST;
+  } catch {
+    return true;
+  }
+}
 
 function resolveModelCost(
   raw?: Partial<ModelDefinitionConfig["cost"]>,
@@ -286,10 +308,15 @@ export function applyModelDefaults(
 
         const maxTokenContextWindow = contextWindow ?? DEFAULT_CONTEXT_TOKENS;
         const api = raw.api ?? providerApi;
-        // maxTokens is a wire-level output cap. Unknown OpenAI Completions
-        // reasoning proxies keep it absent so the provider applies its own
-        // limit. Anthropic Messages requires max_tokens and keeps 8192.
-        const omitUnknownOutputCap = reasoning && api === "openai-completions";
+        // maxTokens is a wire-level output cap. Only documented non-native
+        // openai-completions proxies omit an unknown reasoning cap so the
+        // provider applies its own limit. Native Completions keep 8192.
+        const omitUnknownOutputCap =
+          reasoning &&
+          isExplicitOpenAICompletionsProxyRoute({
+            api,
+            baseUrl: raw.baseUrl ?? nextProvider.baseUrl,
+          });
         const rawMaxTokens =
           asPositiveFiniteNumber(raw.maxTokens) ??
           asPositiveFiniteNumber(catalogModel?.maxTokens) ??

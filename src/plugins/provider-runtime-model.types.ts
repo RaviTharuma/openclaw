@@ -13,8 +13,9 @@ export type ProviderRuntimeModel = Omit<Model, "compat" | "maxTokens"> & {
   contextWindowDefault?: string;
   contextTokens?: number;
   /**
-   * Wire output cap. Omitted for openai-completions reasoning rows with no
-   * authored/catalog cap so the provider applies its own limit.
+   * Wire output cap. Omitted for explicit non-native openai-completions proxy
+   * reasoning rows with no authored/catalog cap so the provider applies its own
+   * limit. Native Completions still default to 8192.
    */
   maxTokens?: number;
   /** Host-resolved provenance for the top-level wire output cap. */
