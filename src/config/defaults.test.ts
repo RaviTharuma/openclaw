@@ -510,6 +510,7 @@ describe("applyModelDefaults catalog seeding", () => {
         models: {
           providers: {
             openai: {
+              // SAFETY: native Completions path with no authored baseUrl.
               api: "openai-completions",
               models: [
                 {
@@ -520,7 +521,7 @@ describe("applyModelDefaults catalog seeding", () => {
                   // SAFETY: native Completions reasoning row that omits maxTokens.
                 } as never,
               ],
-            },
+            } as never,
           },
         },
       },
