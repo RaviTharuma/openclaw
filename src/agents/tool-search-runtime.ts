@@ -161,11 +161,17 @@ function findEntry(
     return namedEntry;
   }
   // Native core tools stay callable by name after structured compaction removes
-  // them from catalog listings. Unknown-id suggestions still use deferred entries
-  // so models are not pointed back at a tool they can already call directly.
+  // them from catalog listings. Unknown-id suggestions include those native
+  // entries so a mistype like file_write can recover to write.
   const nativeEntry = resolveNativeCoreCatalogEntry(catalog, needle);
   if (!nativeEntry) {
-    throw new ToolInputError(formatUnknownToolIdError(needle, entries, errorOptions));
+    throw new ToolInputError(
+      formatUnknownToolIdError(
+        needle,
+        [...entries, ...(catalog.directCoreEntries ?? [])],
+        errorOptions,
+      ),
+    );
   }
   return nativeEntry;
 }
@@ -181,7 +187,10 @@ function findEntryByExactId(
     resolveNativeCoreCatalogEntry(catalog, needle, { exactIdOnly: true });
   if (!entry) {
     throw new ToolInputError(
-      formatUnknownToolIdError(needle, catalog.entries, { ...errorOptions, exactIdOnly: true }),
+      formatUnknownToolIdError(needle, [...catalog.entries, ...(catalog.directCoreEntries ?? [])], {
+        ...errorOptions,
+        exactIdOnly: true,
+      }),
     );
   }
   return entry;
