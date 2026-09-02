@@ -470,7 +470,7 @@ describe("applyModelDefaults catalog seeding", () => {
     expect(model.maxTokens).toBe(8192);
   });
 
-  it("leaves omitted maxTokens unset for custom reasoning models", async () => {
+  it("leaves omitted maxTokens unset for explicit non-native Completions proxy reasoning models", async () => {
     const { applyModelDefaults } = await import("./defaults.js");
     const cfg = applyModelDefaults(
       {
@@ -499,7 +499,73 @@ describe("applyModelDefaults catalog seeding", () => {
       "materialized reasoning model entry",
     );
     expect(model.reasoning).toBe(true);
+    expect(model.api).toBe("openai-completions");
     expect(model.maxTokens).toBeUndefined();
+  });
+
+  it("keeps omitted maxTokens at 8192 for native Completions reasoning models", async () => {
+    const { applyModelDefaults } = await import("./defaults.js");
+    const cfg = applyModelDefaults(
+      {
+        models: {
+          providers: {
+            openai: {
+              api: "openai-completions",
+              models: [
+                {
+                  id: "uncapped-reasoning",
+                  name: "Uncapped Reasoning",
+                  reasoning: true,
+                  contextWindow: 131_072,
+                  // SAFETY: native Completions reasoning row that omits maxTokens.
+                } as never,
+              ],
+            },
+          },
+        },
+      },
+      { manifestRegistry: catalogRegistry },
+    );
+    const model = expectDefined(
+      cfg.models?.providers?.openai?.models?.[0],
+      "materialized native reasoning model entry",
+    );
+    expect(model.reasoning).toBe(true);
+    expect(model.api).toBe("openai-completions");
+    expect(model.maxTokens).toBe(8192);
+  });
+
+  it("keeps omitted maxTokens at 8192 for explicit api.openai.com Completions reasoning models", async () => {
+    const { applyModelDefaults } = await import("./defaults.js");
+    const cfg = applyModelDefaults(
+      {
+        models: {
+          providers: {
+            openai: {
+              baseUrl: "https://api.openai.com/v1",
+              api: "openai-completions",
+              models: [
+                {
+                  id: "uncapped-reasoning",
+                  name: "Uncapped Reasoning",
+                  reasoning: true,
+                  contextWindow: 131_072,
+                  // SAFETY: native openai.com Completions reasoning row that omits maxTokens.
+                } as never,
+              ],
+            },
+          },
+        },
+      },
+      { manifestRegistry: catalogRegistry },
+    );
+    const model = expectDefined(
+      cfg.models?.providers?.openai?.models?.[0],
+      "materialized native openai.com reasoning model entry",
+    );
+    expect(model.reasoning).toBe(true);
+    expect(model.api).toBe("openai-completions");
+    expect(model.maxTokens).toBe(8192);
   });
 
   it("keeps an explicit custom-provider maxTokens when authored", async () => {
