@@ -7,17 +7,11 @@ import type { ModelCompatConfig, ModelMediaInputConfig } from "../config/types.m
  * Fully-resolved runtime model shape used after provider/plugin-owned
  * discovery, overrides, and compat normalization.
  */
-export type ProviderRuntimeModel = Omit<Model, "compat" | "maxTokens"> & {
+export type ProviderRuntimeModel = Omit<Model, "compat"> & {
   compat?: ModelCompatConfig;
   contextWindows?: ModelCatalogContextWindowOption[];
   contextWindowDefault?: string;
   contextTokens?: number;
-  /**
-   * Wire output cap. Omitted for explicit non-native openai-completions proxy
-   * reasoning rows with no authored/catalog cap so the provider applies its own
-   * limit. Native Completions still default to 8192.
-   */
-  maxTokens?: number;
   /** Host-resolved provenance for the top-level wire output cap. */
   maxTokensSource?: "configured" | "discovered";
   params?: Record<string, unknown>;

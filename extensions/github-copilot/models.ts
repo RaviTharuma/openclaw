@@ -182,7 +182,7 @@ function compareCopilotStarterCandidates(
   if (contextDelta !== 0) {
     return contextDelta;
   }
-  const outputDelta = (right.maxTokens ?? 0) - (left.maxTokens ?? 0);
+  const outputDelta = right.maxTokens - left.maxTokens;
   if (outputDelta !== 0) {
     return outputDelta;
   }
