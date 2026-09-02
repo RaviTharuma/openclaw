@@ -177,7 +177,7 @@ function applyModelContextTokensOverride(
   return {
     ...model,
     contextTokens,
-    maxTokens: Math.min(model.maxTokens, contextTokens),
+    maxTokens: Math.min(model.maxTokens ?? contextTokens, contextTokens),
   };
 }
 
