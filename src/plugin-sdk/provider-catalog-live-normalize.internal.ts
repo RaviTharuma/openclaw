@@ -19,6 +19,9 @@ export type ProjectedUpstreamProviderCatalogModel = ModelDefinitionConfig & {
   api: NonNullable<ModelDefinitionConfig["api"]>;
   baseUrl: string;
   input: Array<"text" | "image">;
+  // Live catalog projection rejects rows without an output cap, so callers
+  // that feed this into runtime Model records can keep maxTokens required.
+  maxTokens: number;
 };
 
 export function readLiveModelCatalogId(row: unknown): string | undefined {
