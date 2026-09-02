@@ -536,6 +536,46 @@ describe("applyModelDefaults catalog seeding", () => {
     expect(model.maxTokens).toBe(8192);
   });
 
+  it.each([
+    ["Azure OpenAI", "https://example.openai.azure.com/openai/v1"],
+    ["Foundry", "https://example.services.ai.azure.com/openai/v1"],
+    ["Cognitive Services", "https://example.cognitiveservices.azure.com/openai/v1"],
+  ])(
+    "keeps omitted maxTokens at 8192 for %s Completions reasoning models",
+    async (_label, baseUrl) => {
+      const { applyModelDefaults } = await import("./defaults.js");
+      const cfg = applyModelDefaults(
+        {
+          models: {
+            providers: {
+              azure: {
+                baseUrl,
+                api: "openai-completions",
+                models: [
+                  {
+                    id: "uncapped-reasoning",
+                    name: "Uncapped Reasoning",
+                    reasoning: true,
+                    contextWindow: 131_072,
+                    // SAFETY: Azure-family Completions reasoning row that omits maxTokens.
+                  } as never,
+                ],
+              },
+            },
+          },
+        },
+        { manifestRegistry: catalogRegistry },
+      );
+      const model = expectDefined(
+        cfg.models?.providers?.azure?.models?.[0],
+        "materialized Azure-family reasoning model entry",
+      );
+      expect(model.reasoning).toBe(true);
+      expect(model.api).toBe("openai-completions");
+      expect(model.maxTokens).toBe(8192);
+    },
+  );
+
   it("keeps omitted maxTokens at 8192 for explicit api.openai.com Completions reasoning models", async () => {
     const { applyModelDefaults } = await import("./defaults.js");
     const cfg = applyModelDefaults(

@@ -1,4 +1,5 @@
 // Provides canonical default config values and model/provider defaults.
+import { isAzureOpenAICompatibleHost } from "@openclaw/ai/transports";
 import { normalizeProviderId } from "@openclaw/model-catalog-core/provider-id";
 import {
   collectManifestModelIdNormalizationPolicies,
@@ -77,7 +78,8 @@ function isExplicitOpenAICompletionsProxyRoute(params: {
   baseUrl?: string;
 }): boolean {
   // Documented proxy-route shaping: openai-completions on a non-native, non-empty
-  // baseUrl. Empty/omitted URLs and api.openai.com keep the established 8192 default.
+  // baseUrl. Empty/omitted URLs, api.openai.com, and Azure-family Completions
+  // hosts (same classifier as Completions transport) keep the 8192 default.
   if (params.api !== "openai-completions") {
     return false;
   }
@@ -87,7 +89,7 @@ function isExplicitOpenAICompletionsProxyRoute(params: {
   }
   try {
     const host = new URL(baseUrl).hostname.toLowerCase().replace(/\.+$/, "");
-    return host !== NATIVE_OPENAI_COMPLETIONS_HOST;
+    return host !== NATIVE_OPENAI_COMPLETIONS_HOST && !isAzureOpenAICompatibleHost(host);
   } catch {
     return true;
   }
@@ -310,7 +312,8 @@ export function applyModelDefaults(
         const api = raw.api ?? providerApi;
         // maxTokens is a wire-level output cap. Only documented non-native
         // openai-completions proxies omit an unknown reasoning cap so the
-        // provider applies its own limit. Native Completions keep 8192.
+        // provider applies its own limit. Native Completions and Azure-family
+        // Completions hosts keep 8192.
         const omitUnknownOutputCap =
           reasoning &&
           isExplicitOpenAICompletionsProxyRoute({
