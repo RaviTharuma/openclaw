@@ -502,7 +502,7 @@ describe("applyModelDefaults catalog seeding", () => {
     expect(model.maxTokens).toBeUndefined();
   });
 
-  it("keeps an explicit custom-provider maxTokens below the reasoning fallback", async () => {
+  it("keeps an explicit custom-provider maxTokens when authored", async () => {
     const { applyModelDefaults } = await import("./defaults.js");
     const cfg = applyModelDefaults(
       {
