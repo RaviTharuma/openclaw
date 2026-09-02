@@ -175,8 +175,12 @@ export type ModelDefinitionConfig = {
    * prefer a smaller practical window.
    */
   contextTokens?: number;
-  /** Maximum completion/output token budget. */
-  maxTokens: number;
+  /**
+   * Maximum completion/output token budget.
+   * Omitted when an openai-completions reasoning row has no authored, catalog,
+   * or provider cap so the provider applies its own limit.
+   */
+  maxTokens?: number;
   /** Maps OpenClaw thinking levels to provider/model-specific values. */
   thinkingLevelMap?: ThinkingLevelMap;
   /** Provider-specific request/runtime parameters passed through to provider plugins. */
