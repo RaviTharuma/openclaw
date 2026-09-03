@@ -173,6 +173,7 @@ export async function maybeRestartService(params: {
   requireRunningServiceAfterRestart?: boolean;
   serviceMutationSkipMessage?: string;
   timeoutMs: number;
+  packageAlreadyCurrent?: boolean;
 }): Promise<boolean> {
   const invocationEnv = resolveServiceRefreshEnv(process.env, params.invocationCwd);
   const serviceEnv = resolveServiceRefreshEnv(
@@ -505,6 +506,14 @@ export async function maybeRestartService(params: {
       if (requiresVerifiedRestart()) {
         return false;
       }
+    }
+    return true;
+  }
+
+  if (activation.packageAlreadyCurrent) {
+    if (!activation.opts.json) {
+      defaultRuntime.log("");
+      defaultRuntime.log(theme.muted("Gateway: already at target version; left running."));
     }
     return true;
   }
