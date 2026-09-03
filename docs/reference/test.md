@@ -231,12 +231,16 @@ reply metadata reader, and outbound normalizer. Shared chunks preserve their
 module and WeakMap identity. Generated TUI fixtures remain `.mts` files: Node
 launches them with `--import tsx` for their own syntax, while Bun handles that
 syntax natively without the Node loader. Only their runtime imports change.
-Existing package build entry paths and Vitest source parents stay unchanged. Other
-Worker-thread entries and arbitrary source CLI fixtures remain outside this declared set.
+Existing package build entry paths and Vitest source parents stay unchanged. The
+CLI fork-recovery regression also compiles the real CLI entry and its concurrent
+rebind's session accessor and binding helper together. Both processes use the same
+runtime graph while retaining the durable-write race and process-exit assertions.
+Other Worker-thread entries and arbitrary source CLI fixtures remain outside this declared set.
 
-The session-title retention test declares its title-reader and session-utils roots
-in this same generation. Each fresh heap-measurement child runs their JavaScript
-without spending its execution deadline on TypeScript imports.
+The session-title and child-link retention tests declare their title-reader,
+session-utils, and listing roots in this same generation. Each fresh
+heap-measurement child runs their JavaScript without spending its execution
+deadline on TypeScript imports.
 
 Preparation is lazy across both projects and shards. Config imports, listing
 tests, and tiny tests that do not import these declarations do not load the
@@ -484,7 +488,12 @@ JSON report together. Mantis allocates an invocation directory for setup logs,
 capture attempts, and its report; the builder preserves each attempt's relative
 paths and refuses to overwrite an existing report.
 
-Separate output owners remain: real-Gateway suites, `chat-outbox-*`, and
+The real-Gateway auth transport suite also allocates one fresh directory per
+suite invocation. Its screenshots wait for meaningful content and the presentation
+owner's finite entrance or resize animations, while perpetual descendant activity
+continues.
+
+Separate output owners remain: other real-Gateway suites, `chat-outbox-*`, and
 `chat-attachment-read-lifecycle`. Do not assume those owners have the ordinary
 mocked proof retention guarantee.
 
