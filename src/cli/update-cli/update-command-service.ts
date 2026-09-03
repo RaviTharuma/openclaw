@@ -33,11 +33,11 @@ import { resolveServiceRefreshEnv } from "./update-command-service-env.js";
 import {
   revalidateManagedGatewayServiceAfterUpdate,
   resolveUpdatedGatewayRestartPort,
-  type ManagedGatewayUpdateVerdict,
 } from "./update-command-service-maintenance.js";
 import {
   assertGatewayServiceManagementAllowedForUpdate,
   gatewayServiceCommandUsesRoot,
+  type ManagedGatewayUpdateVerdict,
   resolveGatewayServiceManagementBlockMessageForUpdate,
 } from "./update-command-service-plan.js";
 import {

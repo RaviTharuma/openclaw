@@ -46,6 +46,7 @@ import {
   assertGatewayServiceManagementAllowedForUpdate,
   gatewayServiceCommandUsesRoot,
   GatewayServiceUpdateOwnershipError,
+  type ManagedGatewayUpdateVerdict,
   resolveGatewayServiceManagementBlockMessageForUpdate,
 } from "./update-command-service-plan.js";
 
@@ -86,18 +87,6 @@ export function resolvePreparedGatewayUpdatePolicy(
       shouldRestart && stopState?.stopped === true && verdict?.kind === "owned",
   };
 }
-
-export type ManagedGatewayUpdateVerdict =
-  | { kind: "absent" | "foreign" }
-  | {
-      kind: "owned";
-      root: string;
-      fingerprint: string;
-      refreshDefinition: boolean;
-      requiresInstallRootRefresh?: boolean;
-    }
-  | { kind: "unresolved"; root: string; fingerprint: string }
-  | { kind: "unavailable"; message: string };
 
 async function inspectManagedGatewayServiceBeforeUpdate(params: {
   root: string;
