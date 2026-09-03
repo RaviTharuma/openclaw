@@ -61,6 +61,7 @@ export async function finishUpdate(params: FinishUpdateParams): Promise<UpdateRu
   assertCurrent();
   const shouldRestart =
     params.shouldRestart &&
+    !params.packageAlreadyCurrent &&
     (!params.coreAlreadyCurrent || params.preManagedServiceStop?.running === true);
   let gateway: TriageFailureContext["gateway"] = "preserve";
   let triageAllowed = true;
@@ -508,6 +509,7 @@ export async function finishUpdate(params: FinishUpdateParams): Promise<UpdateRu
       const restarted = await withOwnedManagedUpdateEnv(params.ownedManagedUpdateEnv, async () =>
         maybeRestartService({
           shouldRestart: shouldRestart && restartContext.serviceMutationAllowed,
+          packageAlreadyCurrent: params.packageAlreadyCurrent,
           result: resultWithPostUpdate,
           opts: params.opts,
           refreshServiceEnv: restartContext.refreshGatewayServiceEnv,
