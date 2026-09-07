@@ -449,6 +449,9 @@ export async function createModelSelectionState(params: {
           storePath,
           primaryProvider,
           primaryModel,
+          // Last-used cleanup is not an account switch. The eligibility check
+          // below validates the pin against the selected provider.
+          preserveAuthProfileOverride: true,
         });
       }
     }
