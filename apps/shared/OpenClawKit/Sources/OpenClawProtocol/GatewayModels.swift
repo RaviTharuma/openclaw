@@ -17070,6 +17070,7 @@ public struct SessionsPatchMutation: Codable, Sendable {
     public let permissionmode: AnyCodable?
     public let model: AnyCodable?
     public let agentruntime: AnyCodable?
+    public let threadid: AnyCodable?
     public let completionownersessionkey: AnyCodable?
     public let inheritedtoolpolicyversion: AnyCodable?
     public let inheritedtoolallow: AnyCodable?
@@ -17107,6 +17108,7 @@ public struct SessionsPatchMutation: Codable, Sendable {
         permissionmode: AnyCodable? = nil,
         model: AnyCodable? = nil,
         agentruntime: AnyCodable? = nil,
+        threadid: AnyCodable? = nil,
         completionownersessionkey: AnyCodable? = nil,
         inheritedtoolpolicyversion: AnyCodable? = nil,
         inheritedtoolallow: AnyCodable? = nil,
@@ -17143,6 +17145,7 @@ public struct SessionsPatchMutation: Codable, Sendable {
         self.permissionmode = permissionmode
         self.model = model
         self.agentruntime = agentruntime
+        self.threadid = threadid
         self.completionownersessionkey = completionownersessionkey
         self.inheritedtoolpolicyversion = inheritedtoolpolicyversion
         self.inheritedtoolallow = inheritedtoolallow
@@ -17181,6 +17184,7 @@ public struct SessionsPatchMutation: Codable, Sendable {
         case permissionmode = "permissionMode"
         case model
         case agentruntime = "agentRuntime"
+        case threadid = "threadId"
         case completionownersessionkey = "completionOwnerSessionKey"
         case inheritedtoolpolicyversion = "inheritedToolPolicyVersion"
         case inheritedtoolallow = "inheritedToolAllow"
@@ -17227,6 +17231,7 @@ public struct SessionsPatchParams: Codable, Sendable {
     public let permissionmode: AnyCodable?
     public let model: AnyCodable?
     public let agentruntime: AnyCodable?
+    public let threadid: AnyCodable?
     public let completionownersessionkey: AnyCodable?
     public let inheritedtoolpolicyversion: AnyCodable?
     public let inheritedtoolallow: AnyCodable?
@@ -17271,6 +17276,7 @@ public struct SessionsPatchParams: Codable, Sendable {
         permissionmode: AnyCodable? = nil,
         model: AnyCodable? = nil,
         agentruntime: AnyCodable? = nil,
+        threadid: AnyCodable? = nil,
         completionownersessionkey: AnyCodable? = nil,
         inheritedtoolpolicyversion: AnyCodable? = nil,
         inheritedtoolallow: AnyCodable? = nil,
@@ -17314,6 +17320,7 @@ public struct SessionsPatchParams: Codable, Sendable {
         self.permissionmode = permissionmode
         self.model = model
         self.agentruntime = agentruntime
+        self.threadid = threadid
         self.completionownersessionkey = completionownersessionkey
         self.inheritedtoolpolicyversion = inheritedtoolpolicyversion
         self.inheritedtoolallow = inheritedtoolallow
@@ -17359,6 +17366,7 @@ public struct SessionsPatchParams: Codable, Sendable {
         case permissionmode = "permissionMode"
         case model
         case agentruntime = "agentRuntime"
+        case threadid = "threadId"
         case completionownersessionkey = "completionOwnerSessionKey"
         case inheritedtoolpolicyversion = "inheritedToolPolicyVersion"
         case inheritedtoolallow = "inheritedToolAllow"
