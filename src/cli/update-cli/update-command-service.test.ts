@@ -368,7 +368,6 @@ describe("maybeRestartService", () => {
     },
   );
 
-  
   it("leaves a current gateway running without the --no-restart tip", async () => {
     const logSpy = vi.spyOn(defaultRuntime, "log").mockImplementation(() => undefined);
 
