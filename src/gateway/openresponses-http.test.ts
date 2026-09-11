@@ -528,19 +528,22 @@ describe("OpenResponses HTTP API (e2e)", () => {
         baseURL: `http://127.0.0.1:${enabledPort}/v1`,
         defaultHeaders: { "x-openclaw-scopes": "operator.write" },
         maxRetries: 0,
-||||||| parent of 19edeef96 (fix: keep HTTP promptMode derivation under max-lines and cover OpenResponses)
-  it("preserves buffered leading text in official SDK streaming snapshots", async () => {
-    const expected = "<tag>ok</tag>";
-    agentCommandMock.mockClear();
-    agentCommandMock.mockImplementationOnce((async (opts: unknown) => {
-      const runId = (opts as { runId?: string }).runId;
-      if (!runId) {
-        throw new Error("expected a streaming response run ID");
-      }
-      emitAgentEvent({
-        runId,
-        stream: "assistant",
-        data: { text: expected, delta: "tag>ok</tag>" },
+      });
+      const stream = client.responses.stream({
+        model: "openclaw",
+        input: "Preserve the complete assistant snapshot.",
+      });
+      const deltas: string[] = [];
+      stream.on("response.output_text.delta", (event) => deltas.push(event.delta));
+
+      const response = await stream.finalResponse();
+      expect({ deltas: deltas.join(""), outputText: response.output_text }).toEqual({
+        deltas: expected,
+        outputText: expected,
+      });
+      expect(response.status).toBe("completed");
+    },
+  );
 
   it.each([{ stream: false }, { stream: true }])(
     "defers HTTP promptMode to each attempt model's tools profile (stream: $stream)",
@@ -569,35 +572,6 @@ describe("OpenResponses HTTP API (e2e)", () => {
         await writeGatewayConfig({});
         resetConfigRuntimeState();
       }
-    },
-  );
-
-  it("preserves buffered leading text in official SDK streaming snapshots", async () => {
-    const expected = "<tag>ok</tag>";
-    agentCommandMock.mockClear();
-    agentCommandMock.mockImplementationOnce((async (opts: unknown) => {
-      const runId = (opts as { runId?: string }).runId;
-      if (!runId) {
-        throw new Error("expected a streaming response run ID");
-      }
-      emitAgentEvent({
-        runId,
-        stream: "assistant",
-        data: { text: expected, delta: "tag>ok</tag>" },
-      });
-      const stream = client.responses.stream({
-        model: "openclaw",
-        input: "Preserve the complete assistant snapshot.",
-      });
-      const deltas: string[] = [];
-      stream.on("response.output_text.delta", (event) => deltas.push(event.delta));
-
-      const response = await stream.finalResponse();
-      expect({ deltas: deltas.join(""), outputText: response.output_text }).toEqual({
-        deltas: expected,
-        outputText: expected,
-      });
-      expect(response.status).toBe("completed");
     },
   );
 
