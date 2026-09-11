@@ -127,11 +127,16 @@ export type ToolSearchCatalogSession = {
    * listing them in `entries` next to the Tool Search controls.
    */
   directCoreEntries?: ToolSearchCatalogEntry[];
+  /**
+   * Native core tools removed by the current toolsAllow / execution gate.
+   * Lookups treat these as known-but-unavailable instead of unknown ids.
+   */
+  gatedDirectCoreEntries?: ToolSearchCatalogEntry[];
 };
 
 export type ToolSearchCatalogTelemetry = Omit<
   ToolSearchCatalogSession,
-  "entries" | "directCoreEntries"
+  "entries" | "directCoreEntries" | "gatedDirectCoreEntries"
 > & {
   catalogSize: number;
   sources: Record<CatalogSource, number>;

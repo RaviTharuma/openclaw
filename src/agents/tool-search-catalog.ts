@@ -226,6 +226,7 @@ function attachDirectCoreCodingEntries(
 ): void {
   const entries = collectDirectCoreCodingEntries(visible);
   catalog.directCoreEntries = entries;
+  catalog.gatedDirectCoreEntries = [];
   catalog.directCoreToolNames = entries.map((entry) => entry.name);
 }
 
@@ -345,6 +346,7 @@ function registerToolSearchCatalog(params: {
     callCount: prior?.callCount ?? 0,
     directCoreToolNames: prior?.directCoreToolNames ?? [],
     directCoreEntries: prior?.directCoreEntries ?? [],
+    gatedDirectCoreEntries: prior?.gatedDirectCoreEntries ?? [],
   };
   // Finalization can narrow schemas after last-write-wins registration.
   catalogMetadata.set(next, {
@@ -406,23 +408,30 @@ export function restrictToolSearchCatalog(params: {
   // Native-core fallback is a second callable surface. Apply the same
   // allowlist as catalog.entries so a narrowed toolsAllow cannot still
   // reach exec through tool_call after it left the visible tool list.
-  const directCoreEntries = (
-    params.baselineDirectCoreEntries ??
-    current.directCoreEntries ??
-    []
-  ).filter((entry) => params.allowedToolNames.has(entry.name));
+  const baselineDirectCore =
+    params.baselineDirectCoreEntries ?? current.directCoreEntries ?? [];
+  const directCoreEntries = baselineDirectCore.filter((entry) =>
+    params.allowedToolNames.has(entry.name),
+  );
+  const gatedDirectCoreEntries = baselineDirectCore.filter(
+    (entry) => !params.allowedToolNames.has(entry.name),
+  );
   const entriesUnchanged =
     entries.length === current.entries.length &&
     entries.every((entry, index) => entry === current.entries[index]);
   const currentDirectCore = current.directCoreEntries ?? [];
+  const currentGatedDirectCore = current.gatedDirectCoreEntries ?? [];
   const directCoreUnchanged =
     directCoreEntries.length === currentDirectCore.length &&
-    directCoreEntries.every((entry, index) => entry === currentDirectCore[index]);
+    directCoreEntries.every((entry, index) => entry === currentDirectCore[index]) &&
+    gatedDirectCoreEntries.length === currentGatedDirectCore.length &&
+    gatedDirectCoreEntries.every((entry, index) => entry === currentGatedDirectCore[index]);
   if (entriesUnchanged && directCoreUnchanged) {
     return entries.length;
   }
   current.entries = entries;
   current.directCoreEntries = directCoreEntries;
+  current.gatedDirectCoreEntries = gatedDirectCoreEntries;
   current.directCoreToolNames = directCoreEntries.map((entry) => entry.name);
   catalogMetadata.set(current, {
     ...metadata,

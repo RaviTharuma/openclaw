@@ -17,6 +17,7 @@ import {
   isTrustedToolExecutionPreflightError,
   protectNetworkToolExecutionError,
 } from "./tool-result-error.js";
+import { TOOL_EXECUTION_GATED_MESSAGE } from "./tool-policy-shared.js";
 import {
   compactToolSearchCatalogEntry,
   prepareToolSearchCatalogExecutionTool,
@@ -107,12 +108,19 @@ function findEntry(
   // them from catalog listings. Unknown-id suggestions include those native
   // entries so a mistype like file_write can recover to write.
   const nativeEntry = resolveNativeCoreCatalogEntry(catalog, needle);
-  if (!nativeEntry) {
-    throw new ToolInputError(
-      formatUnknownToolIdError(needle, [...entries, ...(catalog.directCoreEntries ?? [])], options),
-    );
+  if (nativeEntry) {
+    return nativeEntry;
   }
-  return nativeEntry;
+  const gatedNative = resolveNativeCoreCatalogEntry(
+    { ...catalog, directCoreEntries: catalog.gatedDirectCoreEntries ?? [] },
+    needle,
+  );
+  if (gatedNative) {
+    throw new ToolInputError(TOOL_EXECUTION_GATED_MESSAGE);
+  }
+  throw new ToolInputError(
+    formatUnknownToolIdError(needle, [...entries, ...(catalog.directCoreEntries ?? [])], options),
+  );
 }
 
 function findEntryByExactId(
@@ -124,15 +132,23 @@ function findEntryByExactId(
   const entry =
     catalog.entries.find((candidate) => candidate.id === needle) ??
     resolveNativeCoreCatalogEntry(catalog, needle, { exactIdOnly: true });
-  if (!entry) {
-    throw new ToolInputError(
-      formatUnknownToolIdError(needle, [...catalog.entries, ...(catalog.directCoreEntries ?? [])], {
-        ...errorOptions,
-        exactIdOnly: true,
-      }),
-    );
+  if (entry) {
+    return entry;
   }
-  return entry;
+  const gatedNative = resolveNativeCoreCatalogEntry(
+    { ...catalog, directCoreEntries: catalog.gatedDirectCoreEntries ?? [] },
+    needle,
+    { exactIdOnly: true },
+  );
+  if (gatedNative) {
+    throw new ToolInputError(TOOL_EXECUTION_GATED_MESSAGE);
+  }
+  throw new ToolInputError(
+    formatUnknownToolIdError(needle, [...catalog.entries, ...(catalog.directCoreEntries ?? [])], {
+      ...errorOptions,
+      exactIdOnly: true,
+    }),
+  );
 }
 
 const TOOL_SEARCH_SELECTOR_KEYS = ["id", "toolId", "name"] as const;
