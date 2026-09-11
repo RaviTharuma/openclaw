@@ -1421,7 +1421,7 @@ describe("Tool Search", () => {
 
     const runtime = new ToolSearchRuntime({ catalogRef, config }, resolveToolSearchConfig(config));
     await expect(runtime.call("exec", { command: "true" })).rejects.toThrow(
-      "Unknown tool id: exec",
+      "Unavailable in this run",
     );
     expect(execTool.execute).not.toHaveBeenCalled();
 
