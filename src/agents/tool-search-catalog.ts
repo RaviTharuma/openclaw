@@ -408,8 +408,7 @@ export function restrictToolSearchCatalog(params: {
   // Native-core fallback is a second callable surface. Apply the same
   // allowlist as catalog.entries so a narrowed toolsAllow cannot still
   // reach exec through tool_call after it left the visible tool list.
-  const baselineDirectCore =
-    params.baselineDirectCoreEntries ?? current.directCoreEntries ?? [];
+  const baselineDirectCore = params.baselineDirectCoreEntries ?? current.directCoreEntries ?? [];
   const directCoreEntries = baselineDirectCore.filter((entry) =>
     params.allowedToolNames.has(entry.name),
   );
