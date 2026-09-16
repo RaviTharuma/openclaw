@@ -569,10 +569,20 @@ describe("anthropic transport stream", () => {
             model: "claude-sonnet-4-6",
             usage: { input_tokens: 50_001, output_tokens: 0 },
           }),
-          anthropicContentBlockStart(0, { type: "compaction", content: null }),
+          anthropicContentBlockStart(0, {
+            type: "compaction",
+            content: null,
+            encrypted_content: "opaque-initial-compaction",
+          }),
           anthropicContentBlockDelta(0, {
             type: "compaction_delta",
-            content: "summary checkpoint",
+            content: "summary ",
+            encrypted_content: "opaque-partial-compaction",
+          }),
+          anthropicContentBlockDelta(0, {
+            type: "compaction_delta",
+            content: "checkpoint",
+            encrypted_content: "opaque-final-compaction",
           }),
           { type: "content_block_stop", index: 0 },
           anthropicContentBlockStart(1, { type: "text", text: "Done." }),
@@ -658,7 +668,11 @@ describe("anthropic transport stream", () => {
       "user",
     ]);
     expect(replayMessages[0]?.content).toEqual([
-      { type: "compaction", content: "summary checkpoint" },
+      {
+        type: "compaction",
+        content: "summary checkpoint",
+        encrypted_content: "opaque-final-compaction",
+      },
       { type: "text", text: "Done." },
     ]);
     const pressure = resolveCompactionReplayPressure(
@@ -1116,13 +1130,18 @@ describe("anthropic transport stream", () => {
       options,
     );
 
-    expect(result.stopReason).toBe("error");
-    expect(result.errorMessage).toBe(
-      'HTTP 429: {"type":"error","error":{"type":"rate_limit_error","message":"Number of request tokens exceeded the per-minute rate limit."}}; Retry-After: 30 seconds',
-    );
+    expect(result).toMatchObject({ stopReason: "error", errorCode: "429" });
+    expect(result.errorMessage).toMatch(/^429: .*; Retry-After: 30 seconds$/);
+    expect(JSON.parse(result.errorBody ?? "null")).toEqual({
+      type: "error",
+      error: {
+        type: "rate_limit_error",
+        message: "Number of request tokens exceeded the per-minute rate limit.",
+      },
+    });
     expect(acceptanceObserver).not.toHaveBeenCalled();
     expect(onResponse).toHaveBeenCalledWith(
-      { status: 429, headers: { "content-type": "text/plain;charset=UTF-8", "retry-after": "30" } },
+      { status: 429, headers: expect.objectContaining({ "retry-after": "30" }) },
       expect.objectContaining({ provider: "anthropic" }),
     );
   });
@@ -1159,9 +1178,71 @@ describe("anthropic transport stream", () => {
     );
 
     expect(result.stopReason).toBe("error");
-    expect(result.errorMessage).toBe(`HTTP 500: ${"x".repeat(400)}…`);
+    expect(result.errorMessage).toBe(`500: ${"x".repeat(400)}…`);
     expect(pullCount).toBeGreaterThanOrEqual(2);
     expect(cancelCount).toBe(1);
+  });
+
+  it("preserves nested Anthropic proxy rejection details beyond the preview limit", async () => {
+    const message = "A maximum of 4 blocks with cache_control may be provided. Found 5.";
+    const credential = "synthetic-proxy-credential";
+    const media = "c3ludGhldGljLXByaXZhdGUtaW1hZ2U=";
+    const body = {
+      error: {
+        message: "All target providers failed.",
+        attempts: Array.from({ length: 4 }, (_, index) => ({
+          status: 400,
+          details: {
+            type: "error",
+            error: { type: "invalid_request_error", message },
+            request_id: `req_synthetic_${index}`,
+          },
+          request: {
+            headers: { authorization: `Bearer ${credential}`, api_key: credential },
+            image: { type: "image", data: media },
+          },
+        })),
+      },
+    };
+    guardedFetchMock.mockResolvedValueOnce(new Response(JSON.stringify(body), { status: 400 }));
+
+    const result = await runTransportStream(
+      makeAnthropicTransportModel({ id: "claude-sonnet-4-5" }),
+      { messages: [{ role: "user", content: "hello" }] } as AnthropicStreamContext,
+      { apiKey: "test-api-key" } as AnthropicStreamOptions,
+    );
+
+    expect(result).toMatchObject({ stopReason: "error", errorCode: "400" });
+    expect(result.errorMessage).toContain(message);
+    expect(JSON.parse(result.errorMessage?.slice("400: ".length) ?? "null")).toMatchObject({
+      error: {
+        message: "All target providers failed.",
+        attempts: body.error.attempts.map(({ status, details }) => ({ status, details })),
+      },
+    });
+    expect(result.errorBody?.length).toBeLessThanOrEqual(515);
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain(credential);
+    expect(serialized).not.toContain(media);
+    expect(serialized).not.toContain("Malformed diagnostic JSON");
+  });
+
+  it("retains Anthropic HTTP status when an oversized JSON error body must be redacted", async () => {
+    guardedFetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: { message: "x".repeat(9 * 1024) } }), {
+        status: 400,
+      }),
+    );
+
+    const result = await runTransportStream(
+      makeAnthropicTransportModel({ id: "claude-sonnet-4-5" }),
+      { messages: [{ role: "user", content: "hello" }] } as AnthropicStreamContext,
+      { apiKey: "test-api-key" } as AnthropicStreamOptions,
+    );
+
+    expect(result).toMatchObject({ stopReason: "error", errorCode: "400" });
+    expect(result.errorMessage).toContain("400");
+    expect(result.errorMessage).not.toContain("x".repeat(400));
   });
 
   it("aborts stalled streamed Anthropic error responses", async () => {
@@ -1196,7 +1277,7 @@ describe("anthropic transport stream", () => {
 
     expect(result.stopReason).toBe("error");
     expect(result.errorMessage).toBe(
-      "HTTP 500: Anthropic Messages error response stalled: no data received for 10000ms",
+      "500: Anthropic Messages error response stalled: no data received for 10000ms",
     );
     expect(cancelReason).toBeInstanceOf(Error);
     expect((cancelReason as Error).message).toBe(
@@ -4151,7 +4232,7 @@ describe("anthropic transport stream", () => {
 
     const payload = latestAnthropicRequest().payload;
     expect(payload.thinking).toEqual({ type: "adaptive", display: "summarized" });
-    expect(payload.output_config).toEqual({ effort: "high" });
+    expect(payload.output_config).toEqual({ effort: "medium" });
     expect(payload.tool_choice).toEqual({ type: "auto" });
     expect(payload).not.toHaveProperty("temperature");
     expect(result.responseModel).toBe("claude-fable-5");
