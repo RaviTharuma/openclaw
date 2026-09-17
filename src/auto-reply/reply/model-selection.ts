@@ -1,6 +1,5 @@
 /** Model selection state for reply runs, including catalog and override handling. */
 import { buildModelCatalogRef } from "@openclaw/model-catalog-core/model-catalog-refs";
-import { normalizeOptionalString } from "@openclaw/normalization-core/string-coerce";
 import {
   hasLegacyAutoFallbackWithoutOrigin,
   resolveAgentConfig,
@@ -35,16 +34,10 @@ import {
   needsThinkHydration,
   resolveEffectiveAgentRuntime,
 } from "../../agents/thinking-runtime.js";
-import { SessionWorkStartInvalidatedError } from "../../config/sessions/lifecycle.js";
 import { hasSessionAutoModelSelection } from "../../config/sessions/model-override-provenance.js";
-import {
-  adoptPersistedSessionSnapshot,
-  sessionModelOverrideChangesApplied,
-} from "../../config/sessions/session-snapshot-merge.js";
 import type { SessionEntry } from "../../config/sessions/types.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { isDiagnosticFlagEnabled } from "../../infra/diagnostic-flags.js";
-import { applyModelOverrideToSessionEntry } from "../../sessions/model-overrides.js";
 import * as storedModelOverrides from "../../sessions/stored-model-overrides.js";
 import { createLazyImportLoader } from "../../shared/lazy-promise.js";
 import { isUserModelAuthProfileId } from "../../state/user-model-account-id.js";
@@ -55,6 +48,8 @@ import {
   normalizeRuntimeRef,
   resolveRuntimeNormalization,
 } from "./model-runtime-normalization.js";
+import { clearStaleLastUsedSessionRuntime } from "./model-selection-last-used.js";
+import { persistSessionPrimaryModelInherit } from "./model-selection-session-persist.js";
 import { isStaleHeartbeatAutoFallbackOverride } from "./stored-model-override.js";
 export {
   resolveModelDirectiveSelection,
@@ -98,108 +93,9 @@ type ModelSelectionState = {
 const modelCatalogRuntimeLoader = createLazyImportLoader(
   () => import("../../agents/model-catalog.runtime.js"),
 );
-const sessionPersistenceRuntimeLoader = createLazyImportLoader(
-  () => import("./session-entry-persistence.js"),
-);
 
 function loadPreparedModelCatalogRuntime() {
   return modelCatalogRuntimeLoader.load();
-}
-
-function loadSessionPersistenceRuntime() {
-  return sessionPersistenceRuntimeLoader.load();
-}
-
-const LAST_USED_RUNTIME_FIELDS = [
-  "model",
-  "modelProvider",
-  "contextTokens",
-  "contextTokensSource",
-  "contextBudgetStatus",
-] as const satisfies ReadonlyArray<keyof SessionEntry>;
-
-/** Last-run cache only. Default provenance and fallbackNotice stay put. */
-function clearStaleLastUsedRuntimeMetadata(entry: SessionEntry): boolean {
-  let updated = false;
-  for (const field of LAST_USED_RUNTIME_FIELDS) {
-    if (entry[field] !== undefined) {
-      delete entry[field];
-      updated = true;
-    }
-  }
-  if (updated) {
-    entry.updatedAt = Date.now();
-  }
-  return updated;
-}
-
-async function persistSessionEntryMutation(params: {
-  sessionEntry: SessionEntry;
-  sessionStore: Record<string, SessionEntry>;
-  sessionKey: string;
-  storePath?: string;
-  initialSessionEntry: SessionEntry;
-  nextSessionEntry: SessionEntry;
-}): Promise<SessionEntry> {
-  let applied = params.nextSessionEntry;
-  if (params.storePath) {
-    const { persistReplySessionEntry } = await loadSessionPersistenceRuntime();
-    const persistence = await persistReplySessionEntry({
-      storePath: params.storePath,
-      sessionKey: params.sessionKey,
-      initialEntry: params.initialSessionEntry,
-      entry: params.nextSessionEntry,
-    });
-    if (persistence.status === "lifecycle-invalidated") {
-      throw new SessionWorkStartInvalidatedError(persistence.error);
-    }
-    applied = persistence.entry;
-  }
-  adoptPersistedSessionSnapshot(params.sessionEntry, applied);
-  params.sessionStore[params.sessionKey] = params.sessionEntry;
-  return applied;
-}
-
-/** Persists a default-primary inherit onto a session entry (clears stored overrides). */
-async function persistSessionPrimaryModelInherit(params: {
-  sessionEntry: SessionEntry;
-  sessionStore: Record<string, SessionEntry>;
-  sessionKey: string;
-  storePath?: string;
-  primaryProvider: string;
-  primaryModel: string;
-  preserveAuthProfileOverride?: boolean;
-}): Promise<boolean> {
-  const initialSessionEntry = { ...params.sessionEntry };
-  const nextSessionEntry = { ...params.sessionEntry };
-  const { updated } = applyModelOverrideToSessionEntry({
-    entry: nextSessionEntry,
-    selection: {
-      provider: params.primaryProvider,
-      model: params.primaryModel,
-      isDefault: true,
-    },
-    preserveAuthProfileOverride: params.preserveAuthProfileOverride,
-  });
-  if (!updated) {
-    return false;
-  }
-  const persisted = await persistSessionEntryMutation({
-    sessionEntry: params.sessionEntry,
-    sessionStore: params.sessionStore,
-    sessionKey: params.sessionKey,
-    storePath: params.storePath,
-    initialSessionEntry,
-    nextSessionEntry,
-  });
-  if (!params.storePath) {
-    return true;
-  }
-  return sessionModelOverrideChangesApplied({
-    initial: initialSessionEntry,
-    next: nextSessionEntry,
-    current: persisted,
-  });
 }
 
 /** Resolves provider/model, allowlist, catalog, and thinking defaults for a reply run. */
@@ -456,53 +352,22 @@ export async function createModelSelectionState(params: {
   // in place keeps status/CLI bindings on the old provider until a manual
   // sessions.patchMany sweep. Clear runtime cache only; a model-reset would
   // drop explicit Default and fallbackNotice as if the user switched models.
-  if (
-    sessionEntry &&
-    sessionStore &&
-    sessionKey &&
-    !directStoredModelOverride &&
-    !hasOneTurnModelOverride &&
-    !modelSelectionLocked
-  ) {
-    const runtimeModel = normalizeOptionalString(sessionEntry.model);
-    const runtimeProvider = normalizeOptionalString(sessionEntry.modelProvider);
-    if (runtimeModel || runtimeProvider) {
-      const normalizedLastUsed = normalizeRuntimeRef(
-        runtimeProvider ?? defaultProvider,
-        runtimeModel ?? defaultModel,
-        runtimeModelNormalization,
-      );
-      const lastUsedKey = buildModelCatalogRef(
-        normalizedLastUsed.provider,
-        normalizedLastUsed.model,
-      );
-      const primaryKey = buildModelCatalogRef(primaryProvider, primaryModel);
-      const catalogForLookup = modelCatalog ?? allowedModelCatalog;
-      const lastUsedCataloged = Boolean(
-        findSelectedCatalogEntry({
-          catalog: catalogForLookup,
-          provider: normalizedLastUsed.provider,
-          model: normalizedLastUsed.model,
-        }),
-      );
-      const lastUsedUnknown =
-        catalogAuthoritative && catalogForLookup.length > 0 && !lastUsedCataloged;
-      if (lastUsedKey !== primaryKey || lastUsedUnknown) {
-        const initialSessionEntry = { ...sessionEntry };
-        const nextSessionEntry = { ...sessionEntry };
-        if (clearStaleLastUsedRuntimeMetadata(nextSessionEntry)) {
-          await persistSessionEntryMutation({
-            sessionEntry,
-            sessionStore,
-            sessionKey,
-            storePath,
-            initialSessionEntry,
-            nextSessionEntry,
-          });
-        }
-      }
-    }
-  }
+  await clearStaleLastUsedSessionRuntime({
+    sessionEntry,
+    sessionStore,
+    sessionKey,
+    storePath,
+    hasDirectStoredModelOverride: Boolean(directStoredModelOverride),
+    hasOneTurnModelOverride,
+    modelSelectionLocked,
+    defaultProvider,
+    defaultModel,
+    primaryProvider,
+    primaryModel,
+    catalog: modelCatalog ?? allowedModelCatalog,
+    catalogAuthoritative,
+    runtimeModelNormalization,
+  });
   if (staleDirectStoredOverride) {
     if (
       normalizedCurrentSelection.provider === normalizedDirectOverride?.provider &&
