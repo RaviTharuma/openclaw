@@ -31,10 +31,9 @@ import {
   testHostCapabilities,
 } from "./tool-bridge.test-support.js";
 
+type CopilotToolBridgeInput = Parameters<typeof createCopilotToolBridgeImpl>[0];
 type CopilotCodingToolsOptions = NonNullable<
-  Parameters<
-    NonNullable<Parameters<typeof createCopilotToolBridgeImpl>[0]["createOpenClawCodingTools"]>
-  >[0]
+  Parameters<NonNullable<CopilotToolBridgeInput["createOpenClawCodingTools"]>>[0]
 >;
 
 type FakeTool = AnyAgentTool & {
