@@ -179,8 +179,6 @@ describe("lazy protocol validators", () => {
   it("validates session board face patch values", () => {
     expectAccepted(validateSessionsPatchParams, [{ key: "agent:main:main", boardFace: "chat" }]);
     expectRejected(validateSessionsPatchParams, [{ key: "agent:main:main", boardFace: "grid" }]);
-    expectAccepted(validateSessionsPatchParams, [{ key: "agent:main:main", threadId: null }]);
-    expectRejected(validateSessionsPatchParams, [{ key: "agent:main:main", threadId: "12345" }]);
     // The schemas are closed objects; the pre-rename name must not slip back in.
     expectRejected(validateSessionsListParams, [{ face: "dashboard" }]);
   });
@@ -215,7 +213,6 @@ describe("lazy protocol validators", () => {
       execHost: "gateway",
       execNode: "node-1",
       model: "openai/gpt-5.6-luna",
-      threadId: null,
       completionOwnerSessionKey: "agent:main:main",
       inheritedToolPolicyVersion: 1,
       inheritedToolAllow: ["read"],

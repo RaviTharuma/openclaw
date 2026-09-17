@@ -30,16 +30,10 @@ import {
   resolveSubagentConfiguredModelSelection,
 } from "../agents/model-selection.js";
 import { resolveEffectiveAgentRuntime } from "../agents/thinking-runtime.js";
-import { normalizeGroupActivation } from "../auto-reply/group-activation.js";
 import {
   applyModelRuntimeDirective,
   resolveModelRuntimeDirective,
 } from "../auto-reply/reply/directive-handling.model-runtime.js";
-import {
-  stripThreadFromSessionRoute,
-  stripThreadIdFromDeliveryContext,
-  stripThreadIdFromOrigin,
-} from "../auto-reply/reply/session-route-reset.js";
 import {
   normalizeElevatedLevel,
   normalizeFastMode,
@@ -79,7 +73,6 @@ import {
   isModelSelectionLocked,
   MODEL_SELECTION_LOCKED_MESSAGE,
 } from "../sessions/model-overrides.js";
-import { normalizeSendPolicy } from "../sessions/send-policy.js";
 import {
   isSessionAgentAttentionIconId,
   resolveActiveSessionAgentStatus,
@@ -88,12 +81,6 @@ import {
   SESSION_AGENT_STATUS_MAX_TTL_MINUTES,
 } from "../sessions/session-agent-status.js";
 import { isUserModelAuthProfileId } from "../state/user-model-account-id.js";
-import {
-  deliveryContextFromSession,
-  normalizeSessionDeliveryState,
-  sessionDeliveryOrigin,
-  sessionDeliveryRoute,
-} from "../utils/delivery-context.shared.js";
 import type { UserModelAccountSelection } from "./model-account-authority.js";
 import { resolveSessionPatchModelSelection } from "./server-methods/sessions-patch-model-selection.js";
 import {
@@ -102,6 +89,7 @@ import {
 } from "./session-model-patch-origin.js";
 import { normalizeSessionToolOverrides } from "./session-tool-overrides.js";
 import { applySessionContextWindowPatch } from "./sessions-patch-context-window.js";
+import { applySessionsPatchDelivery } from "./sessions-patch-delivery.js";
 import { applySessionsPatchDisplayMetadata } from "./sessions-patch-display-metadata.js";
 import { applySessionsPatchSubagentPolicy } from "./sessions-patch-subagent-policy.js";
 
@@ -725,30 +713,9 @@ function* projectSessionPatchSteps(
     };
   }
 
-  if ("sendPolicy" in patch) {
-    const raw = patch.sendPolicy;
-    if (raw === null) {
-      delete next.sendPolicy;
-    } else if (raw !== undefined) {
-      const normalized = normalizeSendPolicy(raw);
-      if (!normalized) {
-        return invalid('invalid sendPolicy (use "allow"|"deny")');
-      }
-      next.sendPolicy = normalized;
-    }
-  }
-
-  if ("groupActivation" in patch) {
-    const raw = patch.groupActivation;
-    if (raw === null) {
-      delete next.groupActivation;
-    } else if (raw !== undefined) {
-      const normalized = normalizeGroupActivation(raw);
-      if (!normalized) {
-        return invalid('invalid groupActivation (use "mention"|"always")');
-      }
-      next.groupActivation = normalized;
-    }
+  const deliveryError = applySessionsPatchDelivery({ next, patch });
+  if (deliveryError) {
+    return invalid(deliveryError);
   }
 
   if ("agentRuntime" in patch && existing?.agentRuntimeOverride !== next.agentRuntimeOverride) {
@@ -756,17 +723,6 @@ function* projectSessionPatchSteps(
     delete next.contextTokensSource;
     delete next.contextBudgetStatus;
     next.liveModelSwitchPending = true;
-  }
-
-  // Null-only public repair for stale delivery threads. Setting a new thread
-  // via patch is not a sessions.patch contract; /new already strips internally.
-  // Without this, DMs keep sending message_thread_id until the store is edited.
-  if (patch.threadId === null) {
-    next.delivery = normalizeSessionDeliveryState({
-      route: stripThreadFromSessionRoute(sessionDeliveryRoute(next)),
-      context: stripThreadIdFromDeliveryContext(deliveryContextFromSession(next)),
-      origin: stripThreadIdFromOrigin(sessionDeliveryOrigin(next)),
-    });
   }
 
   // Fresh rows and placeholder aliases have no running model to replace. Model
