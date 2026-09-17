@@ -19,7 +19,6 @@ import {
 } from "./schema/tool-output-schema.js";
 import { bindJoinedCollectorInvocation } from "./subagents/swarm/swarm-collector-capability.js";
 import { markToolContractFailure } from "./tool-contract-error.js";
-import { TOOL_EXECUTION_GATED_MESSAGE } from "./tool-policy-shared.js";
 import { isAgentToolReplaySafe } from "./tool-replay-safety.js";
 import {
   isToolResultError,
@@ -31,7 +30,6 @@ import {
   prepareToolSearchCatalogExecutionTool,
   readToolSearchCatalogTelemetry,
   resolveCatalog,
-  resolveNativeCoreCatalogEntry,
   visibleCatalogEntries,
 } from "./tool-search-catalog.js";
 import {
@@ -45,13 +43,12 @@ import {
   tokenizeDocument,
   tokenizeQuery,
 } from "./tool-search-ranking.js";
-import {
-  formatCatalogInputError,
-  formatCatalogOutputError,
-  formatUnknownToolIdError,
-  type ToolLookupErrorOptions,
-} from "./tool-search-recovery.js";
+import { formatCatalogInputError, formatCatalogOutputError } from "./tool-search-recovery.js";
 import { readToolSearchLimit } from "./tool-search-request.js";
+import {
+  findToolSearchCatalogEntry,
+  findToolSearchCatalogEntryByExactId,
+} from "./tool-search-runtime-lookup.js";
 import { runScheduledToolSearchCall } from "./tool-search-scheduling.js";
 import { snapshotToolSearchTargetTranscriptResult } from "./tool-search-transcript.js";
 import type {
@@ -92,72 +89,6 @@ function toolSearchEntryText(entry: ToolSearchCatalogEntry, parameterText?: stri
   return [entry.name, entry.id, entry.label ?? "", entry.description, parameters]
     .filter(Boolean)
     .join(" ");
-}
-
-function findEntry(
-  catalog: ToolSearchCatalogSession,
-  id: string,
-  options?: CatalogVisibilityOptions & ToolLookupErrorOptions,
-): ToolSearchCatalogEntry {
-  const needle = id.trim();
-  const entries = visibleCatalogEntries(catalog, options);
-  const exactIdEntry = entries.find((candidate) => candidate.id === needle);
-  if (exactIdEntry) {
-    return exactIdEntry;
-  }
-  const namedEntries = entries.filter((candidate) => candidate.name === needle);
-  if (namedEntries.length > 1) {
-    throw new ToolInputError(`Ambiguous tool name: ${needle}; use an exact tool id.`);
-  }
-  const namedEntry = namedEntries[0];
-  if (namedEntry) {
-    return namedEntry;
-  }
-  // Native core tools stay callable by name after structured compaction removes
-  // them from catalog listings. Unknown-id suggestions include those native
-  // entries so a mistype like file_write can recover to write.
-  const nativeEntry = resolveNativeCoreCatalogEntry(catalog, needle);
-  if (nativeEntry) {
-    return nativeEntry;
-  }
-  const gatedNative = resolveNativeCoreCatalogEntry(
-    { ...catalog, directCoreEntries: catalog.gatedDirectCoreEntries ?? [] },
-    needle,
-  );
-  if (gatedNative) {
-    throw new ToolInputError(TOOL_EXECUTION_GATED_MESSAGE);
-  }
-  throw new ToolInputError(
-    formatUnknownToolIdError(needle, [...entries, ...(catalog.directCoreEntries ?? [])], options),
-  );
-}
-
-function findEntryByExactId(
-  catalog: ToolSearchCatalogSession,
-  id: string,
-  errorOptions: ToolLookupErrorOptions = {},
-): ToolSearchCatalogEntry {
-  const needle = id.trim();
-  const entry =
-    catalog.entries.find((candidate) => candidate.id === needle) ??
-    resolveNativeCoreCatalogEntry(catalog, needle, { exactIdOnly: true });
-  if (entry) {
-    return entry;
-  }
-  const gatedNative = resolveNativeCoreCatalogEntry(
-    { ...catalog, directCoreEntries: catalog.gatedDirectCoreEntries ?? [] },
-    needle,
-    { exactIdOnly: true },
-  );
-  if (gatedNative) {
-    throw new ToolInputError(TOOL_EXECUTION_GATED_MESSAGE);
-  }
-  throw new ToolInputError(
-    formatUnknownToolIdError(needle, [...catalog.entries, ...(catalog.directCoreEntries ?? [])], {
-      ...errorOptions,
-      exactIdOnly: true,
-    }),
-  );
 }
 
 const TOOL_SEARCH_SELECTOR_KEYS = ["id", "toolId", "name"] as const;
@@ -513,14 +444,20 @@ export class ToolSearchRuntime {
     const catalog = resolveCatalog(this.ctx);
     catalog.describeCount += 1;
     return describeEntry(
-      findEntry(catalog, id, { ...options, codeModeSkills: this.ctx.codeModeSkills }),
+      findToolSearchCatalogEntry(catalog, id, {
+        ...options,
+        codeModeSkills: this.ctx.codeModeSkills,
+      }),
     );
   };
 
   call = async (id: string, input?: unknown, options?: ToolSearchCallOptions) => {
     const catalog = resolveCatalog(this.ctx);
     return await this.callEntry(
-      findEntry(catalog, id, { ...options, codeModeSkills: this.ctx.codeModeSkills }),
+      findToolSearchCatalogEntry(catalog, id, {
+        ...options,
+        codeModeSkills: this.ctx.codeModeSkills,
+      }),
       input,
       options,
     );
@@ -538,7 +475,10 @@ export class ToolSearchRuntime {
   ) => {
     const catalog = resolveCatalog(this.ctx);
     return await this.callEntry(
-      findEntryByExactId(catalog, id, { ...options, codeModeSkills: this.ctx.codeModeSkills }),
+      findToolSearchCatalogEntryByExactId(catalog, id, {
+        ...options,
+        codeModeSkills: this.ctx.codeModeSkills,
+      }),
       input,
       options,
     );
@@ -572,7 +512,7 @@ export class ToolSearchRuntime {
   isReplaySafeExactId = (id: string): boolean => {
     let entry: ToolSearchCatalogEntry;
     try {
-      entry = findEntryByExactId(resolveCatalog(this.ctx), id);
+      entry = findToolSearchCatalogEntryByExactId(resolveCatalog(this.ctx), id);
     } catch {
       return false;
     }
