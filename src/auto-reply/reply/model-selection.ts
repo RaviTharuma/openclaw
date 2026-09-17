@@ -472,7 +472,10 @@ export async function createModelSelectionState(params: {
         runtimeModel ?? defaultModel,
         runtimeModelNormalization,
       );
-      const lastUsedKey = buildModelCatalogRef(normalizedLastUsed.provider, normalizedLastUsed.model);
+      const lastUsedKey = buildModelCatalogRef(
+        normalizedLastUsed.provider,
+        normalizedLastUsed.model,
+      );
       const primaryKey = buildModelCatalogRef(primaryProvider, primaryModel);
       const catalogForLookup = modelCatalog ?? allowedModelCatalog;
       const lastUsedCataloged = Boolean(
