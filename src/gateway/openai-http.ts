@@ -72,7 +72,6 @@ import {
   isGatewaySessionKeyOverrideError,
   isInvalidGatewayModelError,
   isUnknownGatewayAgentError,
-  resolveGatewayRequestContext,
   resolveOpenAiCompatModelOverride,
   resolveOpenAiCompatibleHttpOperatorScopes,
   resolveOpenAiCompatibleHttpSenderIsOwner,
@@ -80,6 +79,7 @@ import {
 import { normalizeInputHostnameAllowlist } from "./input-allowlist.js";
 import { resolveAgentRunUsage } from "./openai-agent-run-usage.js";
 import { resolveOpenAiCompatError, validateOpenAiSamplingParams } from "./openai-compat-errors.js";
+import { resolveOpenAiChatGatewayRequestContext } from "./openai-http-session-context.js";
 import {
   applyToolChoice,
   isToolChoiceConstraintSatisfied,
@@ -907,14 +907,10 @@ export async function handleOpenAiHttpRequest(
   let sessionKey: string;
   let messageChannel: string;
   try {
-    ({ agentId, sessionKey, messageChannel } = resolveGatewayRequestContext({
+    ({ agentId, sessionKey, messageChannel } = resolveOpenAiChatGatewayRequestContext({
       req,
       model,
       user,
-      sessionPrefix: "openai",
-      defaultMessageChannel: "webchat",
-      useMessageChannelHeader: true,
-      bindUserToSession: false,
     }));
   } catch (err) {
     if (
