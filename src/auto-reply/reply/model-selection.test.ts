@@ -2126,6 +2126,103 @@ describe("createModelSelectionState inherits primary from stale last-used", () =
     expect(sessionStore[sessionKey]).toEqual(sessionEntry);
   });
 
+  it("keeps explicit Default provenance so a child does not inherit a parent pin", async () => {
+    const parentKey = "agent:main:telegram:group:123";
+    const sessionKey = "agent:main:telegram:group:123:topic:99";
+    const parentEntry = makeEntry({
+      providerOverride: "anthropic",
+      modelOverride: "claude-opus-4-6",
+      modelOverrideSource: "user",
+    });
+    const sessionEntry = makeEntry({
+      modelOverrideSource: "default",
+      modelProvider: "anthropic",
+      model: "claude-sonnet-4-6",
+      contextTokens: 200_000,
+    });
+    const sessionStore = { [parentKey]: parentEntry, [sessionKey]: sessionEntry };
+    sessionPersistenceMocks.persistReplySessionEntry.mockImplementationOnce(async ({ entry }) => ({
+      status: "current",
+      entry: { ...entry },
+    }));
+
+    const state = await createModelSelectionState({
+      cfg: {} as OpenClawConfig,
+      agentCfg: undefined,
+      sessionEntry,
+      sessionStore,
+      sessionKey,
+      parentSessionKey: parentKey,
+      storePath: "sessions.json",
+      defaultProvider: "openai",
+      defaultModel: "gpt-4o",
+      primaryProvider: "openai",
+      primaryModel: "gpt-4o",
+      provider: "openai",
+      model: "gpt-4o",
+      hasModelDirective: false,
+    });
+
+    expect(state.provider).toBe("openai");
+    expect(state.model).toBe("gpt-4o");
+    expect(sessionEntry.modelOverrideSource).toBe("default");
+    expect(sessionEntry.modelProvider).toBeUndefined();
+    expect(sessionEntry.model).toBeUndefined();
+    expect(sessionEntry.contextTokens).toBeUndefined();
+    const persisted = sessionPersistenceMocks.persistReplySessionEntry.mock.calls[0]?.[0].entry;
+    expect(persisted?.modelOverrideSource).toBe("default");
+    expect(persisted?.modelProvider).toBeUndefined();
+    expect(sessionStore[sessionKey]).toEqual(sessionEntry);
+  });
+
+  it("keeps an active fallbackNotice while clearing stale last-used", async () => {
+    const sessionKey = "agent:main:telegram:direct:1";
+    const fallbackNotice = {
+      kind: "active" as const,
+      selectedModel: "openai/gpt-4o",
+      activeModel: "openai/gpt-4o-mini",
+      reason: "rate-limit",
+    };
+    const sessionEntry = makeEntry({
+      modelProvider: "openai",
+      model: "gpt-4o-mini",
+      contextTokens: 128_000,
+      fallbackNotice,
+    });
+    const sessionStore = { [sessionKey]: sessionEntry };
+    sessionPersistenceMocks.persistReplySessionEntry.mockImplementationOnce(async ({ entry }) => ({
+      status: "current",
+      entry: { ...entry },
+    }));
+
+    const state = await createModelSelectionState({
+      cfg: {} as OpenClawConfig,
+      agentCfg: undefined,
+      sessionEntry,
+      sessionStore,
+      sessionKey,
+      storePath: "sessions.json",
+      defaultProvider: "openai",
+      defaultModel: "gpt-4o",
+      primaryProvider: "openai",
+      primaryModel: "gpt-4o",
+      provider: "openai",
+      model: "gpt-4o",
+      hasModelDirective: false,
+    });
+
+    expect(state.provider).toBe("openai");
+    expect(state.model).toBe("gpt-4o");
+    expect(sessionEntry.fallbackNotice).toEqual(fallbackNotice);
+    expect(sessionEntry.modelProvider).toBeUndefined();
+    expect(sessionEntry.model).toBeUndefined();
+    expect(sessionEntry.contextTokens).toBeUndefined();
+    const persisted = sessionPersistenceMocks.persistReplySessionEntry.mock.calls[0]?.[0].entry;
+    expect(persisted?.fallbackNotice).toEqual(fallbackNotice);
+    expect(persisted?.modelProvider).toBeUndefined();
+    expect(sessionStore[sessionKey]).toEqual(sessionEntry);
+  });
+
   it("keeps last-used when it already matches the current primary", async () => {
     const sessionKey = "agent:main:telegram:direct:1";
     const sessionEntry = makeEntry({

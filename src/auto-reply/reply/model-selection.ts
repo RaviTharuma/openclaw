@@ -110,7 +110,57 @@ function loadSessionPersistenceRuntime() {
   return sessionPersistenceRuntimeLoader.load();
 }
 
-/** Persists a default-primary inherit onto a session entry (clears overrides and stale last-used). */
+const LAST_USED_RUNTIME_FIELDS = [
+  "model",
+  "modelProvider",
+  "contextTokens",
+  "contextTokensSource",
+  "contextBudgetStatus",
+] as const satisfies ReadonlyArray<keyof SessionEntry>;
+
+/** Last-run cache only. Default provenance and fallbackNotice stay put. */
+function clearStaleLastUsedRuntimeMetadata(entry: SessionEntry): boolean {
+  let updated = false;
+  for (const field of LAST_USED_RUNTIME_FIELDS) {
+    if (entry[field] !== undefined) {
+      delete entry[field];
+      updated = true;
+    }
+  }
+  if (updated) {
+    entry.updatedAt = Date.now();
+  }
+  return updated;
+}
+
+async function persistSessionEntryMutation(params: {
+  sessionEntry: SessionEntry;
+  sessionStore: Record<string, SessionEntry>;
+  sessionKey: string;
+  storePath?: string;
+  initialSessionEntry: SessionEntry;
+  nextSessionEntry: SessionEntry;
+}): Promise<SessionEntry> {
+  let applied = params.nextSessionEntry;
+  if (params.storePath) {
+    const { persistReplySessionEntry } = await loadSessionPersistenceRuntime();
+    const persistence = await persistReplySessionEntry({
+      storePath: params.storePath,
+      sessionKey: params.sessionKey,
+      initialEntry: params.initialSessionEntry,
+      entry: params.nextSessionEntry,
+    });
+    if (persistence.status === "lifecycle-invalidated") {
+      throw new SessionWorkStartInvalidatedError(persistence.error);
+    }
+    applied = persistence.entry;
+  }
+  adoptPersistedSessionSnapshot(params.sessionEntry, applied);
+  params.sessionStore[params.sessionKey] = params.sessionEntry;
+  return applied;
+}
+
+/** Persists a default-primary inherit onto a session entry (clears stored overrides). */
 async function persistSessionPrimaryModelInherit(params: {
   sessionEntry: SessionEntry;
   sessionStore: Record<string, SessionEntry>;
@@ -134,29 +184,22 @@ async function persistSessionPrimaryModelInherit(params: {
   if (!updated) {
     return false;
   }
-  if (params.storePath) {
-    const { persistReplySessionEntry } = await loadSessionPersistenceRuntime();
-    const persistence = await persistReplySessionEntry({
-      storePath: params.storePath,
-      sessionKey: params.sessionKey,
-      initialEntry: initialSessionEntry,
-      entry: nextSessionEntry,
-    });
-    if (persistence.status === "lifecycle-invalidated") {
-      throw new SessionWorkStartInvalidatedError(persistence.error);
-    }
-    const resetApplied = sessionModelOverrideChangesApplied({
-      initial: initialSessionEntry,
-      next: nextSessionEntry,
-      current: persistence.entry,
-    });
-    adoptPersistedSessionSnapshot(params.sessionEntry, persistence.entry);
-    params.sessionStore[params.sessionKey] = params.sessionEntry;
-    return resetApplied;
+  const persisted = await persistSessionEntryMutation({
+    sessionEntry: params.sessionEntry,
+    sessionStore: params.sessionStore,
+    sessionKey: params.sessionKey,
+    storePath: params.storePath,
+    initialSessionEntry,
+    nextSessionEntry,
+  });
+  if (!params.storePath) {
+    return true;
   }
-  adoptPersistedSessionSnapshot(params.sessionEntry, nextSessionEntry);
-  params.sessionStore[params.sessionKey] = params.sessionEntry;
-  return true;
+  return sessionModelOverrideChangesApplied({
+    initial: initialSessionEntry,
+    next: nextSessionEntry,
+    current: persisted,
+  });
 }
 
 /** Resolves provider/model, allowlist, catalog, and thinking defaults for a reply run. */
@@ -411,7 +454,8 @@ export async function createModelSelectionState(params: {
   // Last-used model/modelProvider is last-run cache, not a user pin. After
   // defaults.primary changes (or the pair is unknown in catalog), leaving it
   // in place keeps status/CLI bindings on the old provider until a manual
-  // sessions.patchMany sweep. Inherit primary here; keep explicit overrides.
+  // sessions.patchMany sweep. Clear runtime cache only; a model-reset would
+  // drop explicit Default and fallbackNotice as if the user switched models.
   if (
     sessionEntry &&
     sessionStore &&
@@ -441,17 +485,18 @@ export async function createModelSelectionState(params: {
       const lastUsedUnknown =
         catalogAuthoritative && catalogForLookup.length > 0 && !lastUsedCataloged;
       if (lastUsedKey !== primaryKey || lastUsedUnknown) {
-        await persistSessionPrimaryModelInherit({
-          sessionEntry,
-          sessionStore,
-          sessionKey,
-          storePath,
-          primaryProvider,
-          primaryModel,
-          // Last-used cleanup is not an account switch. The eligibility check
-          // below validates the pin against the selected provider.
-          preserveAuthProfileOverride: true,
-        });
+        const initialSessionEntry = { ...sessionEntry };
+        const nextSessionEntry = { ...sessionEntry };
+        if (clearStaleLastUsedRuntimeMetadata(nextSessionEntry)) {
+          await persistSessionEntryMutation({
+            sessionEntry,
+            sessionStore,
+            sessionKey,
+            storePath,
+            initialSessionEntry,
+            nextSessionEntry,
+          });
+        }
       }
     }
   }
