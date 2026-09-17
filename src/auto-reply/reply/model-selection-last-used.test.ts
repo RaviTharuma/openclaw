@@ -433,6 +433,37 @@ describe("createModelSelectionState inherits primary from stale last-used", () =
     expect(sessionStore[sessionKey]).toEqual(sessionEntry);
   });
 
+  it("skips last-used persist when a stored override already pins the model", async () => {
+    const sessionKey = "agent:main:main";
+    const sessionEntry = makeEntry({
+      model: "kimi-code",
+      modelProvider: "kimi",
+      contextTokens: 262_000,
+      providerOverride: "anthropic",
+      modelOverride: "claude-opus-4-6",
+    });
+    const sessionStore = { [sessionKey]: sessionEntry };
+
+    const state = await createModelSelectionState({
+      cfg: {} as OpenClawConfig,
+      agentCfg: undefined,
+      sessionEntry,
+      sessionStore,
+      sessionKey,
+      defaultProvider: "inferencer",
+      defaultModel: "deepseek-v3-4bit-mlx",
+      provider: "inferencer",
+      model: "deepseek-v3-4bit-mlx",
+      hasModelDirective: false,
+    });
+
+    expect(state.provider).toBe("anthropic");
+    expect(state.model).toBe("claude-opus-4-6");
+    expect(sessionEntry.modelProvider).toBe("kimi");
+    expect(sessionEntry.model).toBe("kimi-code");
+    expect(sessionPersistenceMocks.persistReplySessionEntry).not.toHaveBeenCalled();
+  });
+
   it("keeps last-used when it already matches the current primary", async () => {
     const sessionKey = "agent:main:telegram:direct:1";
     const sessionEntry = makeEntry({

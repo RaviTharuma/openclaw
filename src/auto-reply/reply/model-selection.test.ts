@@ -1358,7 +1358,6 @@ describe("createModelSelectionState respects session model override", () => {
 
     expect(state.provider).toBe("anthropic");
     expect(state.model).toBe("claude-opus-4-6");
-    expect(sessionPersistenceMocks.persistReplySessionEntry).not.toHaveBeenCalled();
   });
 
   it("uses default provider when providerOverride is not set but modelOverride is", async () => {
